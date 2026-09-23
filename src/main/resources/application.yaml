@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/smarthome
+    username: smarthome
+    password: smarthome
+  jpa:
+    hibernate:
+      ddl-auto: validate   # quem cria as tabelas é o Flyway, não o Hibernate
+  flyway:
+    enabled: true
