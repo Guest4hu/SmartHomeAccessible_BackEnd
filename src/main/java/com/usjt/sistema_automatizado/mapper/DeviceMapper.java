@@ -16,12 +16,11 @@ public class DeviceMapper {
 
         Device device = new Device();
         device.setHome(home);
-        device.setExternalId(request.getExternalId());
-        device.setName(request.getName());
-        device.setRoom(request.getRoom());
+        // Lendo os dados do record (sem o 'get')
+        device.setExternalId(request.externalId());
+        device.setName(request.name());
+        device.setRoom(request.room());
 
-        // Os campos status, lastSeenAt e firmwareVersion assumem os valores
-        // por omissão da entidade ou ficam nulos no momento do registo inicial.
         return device;
     }
 
@@ -30,15 +29,15 @@ public class DeviceMapper {
             return null;
         }
 
-        DeviceResponse response = new DeviceResponse();
-        response.setId(entity.getId());
-        response.setExternalId(entity.getExternalId());
-        response.setName(entity.getName());
-        response.setRoom(entity.getRoom());
-        response.setStatus(entity.getStatus());
-        response.setLastSeenAt(entity.getLastSeenAt());
-        response.setFirmwareVersion(entity.getFirmwareVersion());
-
-        return response;
+        // Criando a resposta diretamente pelo construtor do record
+        return new DeviceResponse(
+                entity.getId(),
+                entity.getExternalId(),
+                entity.getName(),
+                entity.getRoom(),
+                entity.getStatus(),
+                entity.getLastSeenAt(),
+                entity.getFirmwareVersion()
+        );
     }
 }

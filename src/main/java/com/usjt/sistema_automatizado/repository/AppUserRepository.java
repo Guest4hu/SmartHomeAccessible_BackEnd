@@ -9,5 +9,6 @@ import java.util.Optional;
 @Repository
 public interface AppUserRepository extends JpaRepository<AppUser, Long> {
 
+    // Consulta por nome de método que o Spring Data JPA escreve automaticamente o SQL
     Optional<AppUser> findByEmail(String email);
 }

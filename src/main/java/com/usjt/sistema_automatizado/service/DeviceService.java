@@ -4,45 +4,59 @@ import com.usjt.sistema_automatizado.dto.request.DeviceRequest;
 import com.usjt.sistema_automatizado.dto.response.DeviceResponse;
 import com.usjt.sistema_automatizado.mapper.DeviceMapper;
 import com.usjt.sistema_automatizado.model.entity.Device;
-import com.usjt.sistema_automatizado.model.entity.Home;
+import com.usjt.sistema_automatizado.model.entity.HomeMember;
+import com.usjt.sistema_automatizado.model.enums.DeviceStatus;
+import com.usjt.sistema_automatizado.model.enums.HomeRole;
 import com.usjt.sistema_automatizado.repository.DeviceRepository;
-import com.usjt.sistema_automatizado.repository.HomeRepository;
-import jakarta.persistence.EntityNotFoundException;
+import com.usjt.sistema_automatizado.repository.HomeMemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor // <-- O Lombok cria o construtor invisível.
+@RequiredArgsConstructor
 public class DeviceService {
 
     private final DeviceRepository deviceRepository;
-    private final HomeRepository homeRepository;
+    private final HomeMemberRepository homeMemberRepository;
     private final DeviceMapper deviceMapper;
 
     @Transactional
-    public DeviceResponse createDevice(DeviceRequest request) {
-        Home home = homeRepository.findById(request.getHomeId())
-                .orElseThrow(() -> new EntityNotFoundException("Casa não encontrada com o ID: " + request.getHomeId()));
+    public DeviceResponse createDevice(Long homeId, DeviceRequest request, Long requesterId) {
+        // 1. Verifica se o solicitante pertence à casa
+        HomeMember member = homeMemberRepository.findByHomeIdAndUserId(homeId, requesterId)
+                .orElseThrow(() -> new IllegalArgumentException("Não tem acesso a esta casa."));
 
-        if (deviceRepository.findByExternalId(request.getExternalId()).isPresent()) {
-            throw new IllegalArgumentException("Já existe um dispositivo com o identificador externo: " + request.getExternalId());
+        // 2. Autorização: Apenas o ADMIN pode adicionar dispositivos
+        if (member.getRole() != HomeRole.ADMIN) {
+            throw new IllegalArgumentException("Apenas o ADMIN pode registar novos dispositivos.");
         }
 
-        Device device = deviceMapper.toEntity(request, home);
+        // 3. Verifica se já existe um dispositivo com o mesmo externalId
+        if (deviceRepository.findByExternalId(request.externalId()).isPresent()) {
+            throw new IllegalArgumentException("Já existe um dispositivo registado com este identificador externo.");
+        }
+
+        // 4. Cria o dispositivo (passando a casa que já recuperámos da tabela de membros)
+        Device device = deviceMapper.toEntity(request, member.getHome());
+        device.setStatus(DeviceStatus.OFFLINE); // Nasce offline até enviar a primeira telemetria/evento
+
         Device savedDevice = deviceRepository.save(device);
 
         return deviceMapper.toResponse(savedDevice);
     }
 
     @Transactional(readOnly = true)
-    public List<DeviceResponse> findAllDevices() {
-        return deviceRepository.findAll()
-                .stream()
+    public List<DeviceResponse> listDevices(Long homeId, Long requesterId) {
+        // 1. Verifica se tem acesso (ADMIN ou FAMILY podem ver a lista)
+        homeMemberRepository.findByHomeIdAndUserId(homeId, requesterId)
+                .orElseThrow(() -> new IllegalArgumentException("Não tem acesso a esta casa."));
+
+        // 2. Devolve a lista mapeada
+        return deviceRepository.findByHomeId(homeId).stream()
                 .map(deviceMapper::toResponse)
-                .collect(Collectors.toList());
+                .toList();
     }
 }

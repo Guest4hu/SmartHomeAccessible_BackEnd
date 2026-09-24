@@ -12,21 +12,28 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/devices")
+@RequestMapping("/api/v1/homes/{homeId}/devices")
 @RequiredArgsConstructor
 public class DeviceController {
 
     private final DeviceService deviceService;
 
     @PostMapping
-    public ResponseEntity<DeviceResponse> createDevice(@Valid @RequestBody DeviceRequest request) {
-        DeviceResponse response = deviceService.createDevice(request);
+    public ResponseEntity<DeviceResponse> createDevice(
+            @PathVariable Long homeId,
+            @Valid @RequestBody DeviceRequest request,
+            @RequestHeader("X-User-Id") Long requesterId
+    ) {
+        DeviceResponse response = deviceService.createDevice(homeId, request, requesterId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping
-    public ResponseEntity<List<DeviceResponse>> findAllDevices() {
-        List<DeviceResponse> responses = deviceService.findAllDevices();
+    public ResponseEntity<List<DeviceResponse>> listDevices(
+            @PathVariable Long homeId,
+            @RequestHeader("X-User-Id") Long requesterId
+    ) {
+        List<DeviceResponse> responses = deviceService.listDevices(homeId, requesterId);
         return ResponseEntity.ok(responses);
     }
 }
