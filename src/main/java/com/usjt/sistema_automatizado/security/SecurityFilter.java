@@ -30,7 +30,7 @@ public class SecurityFilter extends OncePerRequestFilter {
             UserDetails user = userDetailsService.loadUserById(userId);
 
             // Autentica a requisição para o Spring
-            var authentication = new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
+            var authentication = new UsernamePasswordAuthenticationToken(userId, null, user.getAuthorities());
             SecurityContextHolder.getContext().setAuthentication(authentication);
         }
 
