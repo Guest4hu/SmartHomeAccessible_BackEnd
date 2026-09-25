@@ -71,9 +71,9 @@ CREATE INDEX idx_device_home ON device (home_id);
 CREATE TABLE automation_config (
                                    id                BIGINT AUTO_INCREMENT PRIMARY KEY,
                                    device_id         BIGINT       NOT NULL,
-                                   fan_on_above      DECIMAL(4,1) NOT NULL DEFAULT 28.0,   -- liga o ventilador acima de (°C)
-                                   fan_off_below     DECIMAL(4,1) NOT NULL DEFAULT 26.0,   -- desliga abaixo de (°C)
-                                   dark_below        INT          NOT NULL DEFAULT 200,    -- leitura do LDR considerada "escuro"
+                                   fan_on_above      DOUBLE NOT NULL DEFAULT 28.0,   -- liga o ventilador acima de (°C)
+                                   fan_off_below     DOUBLE NOT NULL DEFAULT 26.0,   -- desliga abaixo de (°C)
+                                   dark_below        DOUBLE NOT NULL DEFAULT 200,    -- leitura do LDR considerada "escuro"
                                    doorbell_pattern  VARCHAR(30)  NOT NULL DEFAULT 'BLUE_PULSE',
                                    updated_at        DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
                                        ON UPDATE CURRENT_TIMESTAMP(3),

@@ -1,7 +1,7 @@
 -- 1. Criar o Utilizador de Teste (Gustavo)
 -- O banco de dados atribuirá o ID 1 a este utilizador
-INSERT INTO app_user (name, email, password_hash, active, created_at) 
-VALUES ('Gustavo (Dev Tester)', 'gustavo@email.com', 'senha_falsa_123', true, UTC_TIMESTAMP());
+INSERT INTO app_user (name, email, password_hash, active, created_at)
+VALUES ('Gustavo (Dev Tester)', 'gustavo@email.com', '$2a$10$C4EcVzENmxLZD7v8J1O0PuodvyfpxTTdKidImoywN2.QRAt2vD4xm', true, UTC_TIMESTAMP());
 
 -- 2. Criar a Casa de Teste
 -- O banco de dados atribuirá o ID 1 a esta casa

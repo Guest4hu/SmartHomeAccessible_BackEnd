@@ -8,3 +8,8 @@ spring:
       ddl-auto: validate   # quem cria as tabelas é o Flyway, não o Hibernate
   flyway:
     enabled: true
+api:
+  security:
+    token:
+      secret: ${JWT_SECRET}
+      expiration: ${JWT_EXPIRATION}
