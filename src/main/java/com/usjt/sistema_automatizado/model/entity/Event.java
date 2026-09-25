@@ -10,7 +10,13 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
 @Entity
-@Table(name = "event")
+@Table(
+        name = "event",
+        indexes = {
+                @Index(name = "idx_event_device_time", columnList = "device_id, occurred_at"),
+                @Index(name = "idx_event_type_time", columnList = "type, occurred_at")
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -25,28 +31,26 @@ public class Event {
     private Device device;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
+    @Column(nullable = false, length = 30) // Ajustado rigorosamente para VARCHAR(30)
     private EventType type;
 
-    // Hora exata em que o botão foi pressionado no hardware
     @Column(name = "occurred_at", nullable = false)
     private LocalDateTime occurredAt;
 
-    // Hora em que o nosso servidor Spring Boot recebeu o aviso
     @Column(name = "received_at", nullable = false, updatable = false)
     private LocalDateTime receivedAt;
 
-    // Quando é que o utilizador surdo (ou familiar) viu o alerta
     @Column(name = "acknowledged_at")
     private LocalDateTime acknowledgedAt;
 
-    // Quem foi o utilizador exato que viu o alerta
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "acknowledged_by")
     private AppUser acknowledgedBy;
 
     @PrePersist
-    public void prePersist() {
-        this.receivedAt = LocalDateTime.now(ZoneOffset.UTC);
+    protected void onCreate() {
+        if (this.receivedAt == null) {
+            this.receivedAt = LocalDateTime.now(ZoneOffset.UTC);
+        }
     }
 }

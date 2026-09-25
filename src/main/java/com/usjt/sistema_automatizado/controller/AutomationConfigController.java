@@ -6,6 +6,7 @@ import com.usjt.sistema_automatizado.service.AutomationConfigService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -18,7 +19,7 @@ public class AutomationConfigController {
     @GetMapping
     public ResponseEntity<AutomationConfigResponse> getConfig(
             @PathVariable Long deviceId,
-            @RequestHeader("X-User-Id") Long requesterId
+            @AuthenticationPrincipal Long requesterId
     ) {
         return ResponseEntity.ok(automationConfigService.getConfig(deviceId, requesterId));
     }
@@ -27,7 +28,7 @@ public class AutomationConfigController {
     public ResponseEntity<AutomationConfigResponse> updateConfig(
             @PathVariable Long deviceId,
             @Valid @RequestBody AutomationConfigRequest request,
-            @RequestHeader("X-User-Id") Long requesterId
+            @AuthenticationPrincipal Long requesterId
     ) {
         return ResponseEntity.ok(automationConfigService.updateConfig(deviceId, request, requesterId));
     }

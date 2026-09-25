@@ -7,6 +7,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.stream.Collectors;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -24,8 +26,12 @@ public class GlobalExceptionHandler {
     // Apanha erros do @Valid (ex: campos em branco ou nulos)
     @ExceptionHandler(org.springframework.web.bind.MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationExceptions(org.springframework.web.bind.MethodArgumentNotValidException ex) {
-        // Pega apenas a primeira mensagem de erro da lista
-        String errorMessage = ex.getBindingResult().getFieldErrors().get(0).getDefaultMessage();
+        // Junta todos os erros numa única string separada por vírgula
+        String errorMessage = ex.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.getDefaultMessage())
+                .collect(Collectors.joining(", "));
+
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(errorMessage));
     }
+
 }

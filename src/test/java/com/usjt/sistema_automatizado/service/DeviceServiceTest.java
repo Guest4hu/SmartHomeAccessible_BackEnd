@@ -1,6 +1,7 @@
 package com.usjt.sistema_automatizado.service;
 
 import com.usjt.sistema_automatizado.dto.request.DeviceRequest;
+import com.usjt.sistema_automatizado.dto.request.TelemetryRequest;
 import com.usjt.sistema_automatizado.dto.response.DeviceResponse;
 import com.usjt.sistema_automatizado.mapper.DeviceMapper;
 import com.usjt.sistema_automatizado.model.entity.Device;
@@ -16,6 +17,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -145,5 +147,60 @@ class DeviceServiceTest {
         // Assert
         assertEquals(2, result.size());
         verify(deviceRepository, times(1)).findByHomeId(homeId); // Validou se pesquisou no banco pelo ID da casa
+    }
+    @Test
+    void processHeartbeat_DeveAtualizarStatusParaOnline_QuandoDispositivoExistir() {
+        // Arrange
+        String deviceId = "esp32-dht11-01";
+        TelemetryRequest request = new TelemetryRequest(
+                1,                      // v (versão)
+                deviceId,               // deviceId
+                LocalDateTime.now(),    // ts (timestamp)
+                25.5,                   // temperature
+                60.0,                   // humidity
+                450.0                   // luminosity
+        );
+
+        Device device = new Device();
+        device.setId(10L);
+        device.setExternalId(deviceId);
+        device.setStatus(DeviceStatus.OFFLINE);
+
+        DeviceResponse expectedResponse = mock(DeviceResponse.class);
+
+        when(deviceRepository.findByExternalId(deviceId)).thenReturn(Optional.of(device));
+        when(deviceRepository.save(device)).thenReturn(device);
+        when(deviceMapper.toResponse(device)).thenReturn(expectedResponse);
+
+        // Act
+        DeviceResponse actualResponse = deviceService.processHeartbeat(request);
+
+        // Assert
+        assertNotNull(actualResponse);
+        assertEquals(DeviceStatus.ONLINE, device.getStatus()); // Garante que passou para ONLINE
+        verify(deviceRepository, times(1)).save(device);
+    }
+
+    @Test
+    void processHeartbeat_DeveLancarExcecao_QuandoDispositivoNaoEncontrado() {
+        // Arrange
+        String deviceId = "esp32-inexistente";
+        TelemetryRequest request = new TelemetryRequest(
+                1,
+                deviceId,
+                LocalDateTime.now(),
+                null, null, null
+        );
+
+        when(deviceRepository.findByExternalId(deviceId)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> deviceService.processHeartbeat(request)
+        );
+
+        assertEquals("Dispositivo não encontrado com o identificador externo fornecido.", exception.getMessage());
+        verify(deviceRepository, never()).save(any());
     }
 }

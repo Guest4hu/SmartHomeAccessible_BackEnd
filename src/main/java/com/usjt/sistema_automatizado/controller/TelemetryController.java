@@ -1,9 +1,11 @@
 package com.usjt.sistema_automatizado.controller;
 
 import com.usjt.sistema_automatizado.dto.request.TelemetryRequest;
+import com.usjt.sistema_automatizado.dto.response.DeviceResponse;
 import com.usjt.sistema_automatizado.dto.response.MetricInfoResponse;
 import com.usjt.sistema_automatizado.dto.response.MetricSeriesResponse;
 import com.usjt.sistema_automatizado.model.enums.MetricType;
+import com.usjt.sistema_automatizado.service.DeviceService;
 import com.usjt.sistema_automatizado.service.TelemetryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

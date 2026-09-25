@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,7 +24,7 @@ public class HomeController {
     @PostMapping
     public ResponseEntity<HomeResponse> createHome(
             @Valid @RequestBody HomeRequest request,
-            @RequestHeader("X-User-Id") Long userId
+            @AuthenticationPrincipal Long userId
     ) {
         HomeResponse response = homeService.createHome(request, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -31,7 +32,7 @@ public class HomeController {
 
     @GetMapping
     public ResponseEntity<List<HomeResponse>> getUserHomes(
-            @RequestHeader("X-User-Id") Long userId
+            @AuthenticationPrincipal Long userId
     ) {
         List<HomeResponse> responses = homeService.getUserHomes(userId);
         return ResponseEntity.ok(responses);
@@ -39,7 +40,7 @@ public class HomeController {
     @GetMapping("/{homeId}/members")
     public ResponseEntity<List<HomeMemberResponse>> getHomeMembers(
             @PathVariable Long homeId,
-            @RequestHeader("X-User-Id") Long requesterId
+            @AuthenticationPrincipal Long requesterId
     ) {
         List<HomeMemberResponse> responses = homeService.getHomeMembers(homeId, requesterId);
         return ResponseEntity.ok(responses);
@@ -48,9 +49,9 @@ public class HomeController {
     @PostMapping("/{homeId}/members")
     public ResponseEntity<HomeMemberResponse> addMember(
             @PathVariable Long homeId,
-            @Valid @RequestBody HomeMemberRequest request,
-            @RequestHeader("X-User-Id") Long requesterId
-    ) {
+            @RequestBody @Valid HomeMemberRequest request,
+            @AuthenticationPrincipal Long requesterId) {
+
         HomeMemberResponse response = homeService.addMember(homeId, request, requesterId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }

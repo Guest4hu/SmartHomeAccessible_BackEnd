@@ -1,24 +1,33 @@
 package com.usjt.sistema_automatizado.service;
 
+import com.usjt.sistema_automatizado.dto.request.CommandRequest;
 import com.usjt.sistema_automatizado.dto.request.DeviceRequest;
+import com.usjt.sistema_automatizado.dto.request.TelemetryRequest;
+import com.usjt.sistema_automatizado.dto.response.CommandResponse;
 import com.usjt.sistema_automatizado.dto.response.DeviceResponse;
 import com.usjt.sistema_automatizado.mapper.DeviceMapper;
+import com.usjt.sistema_automatizado.model.entity.AppUser;
 import com.usjt.sistema_automatizado.model.entity.Device;
 import com.usjt.sistema_automatizado.model.entity.HomeMember;
 import com.usjt.sistema_automatizado.model.enums.DeviceStatus;
 import com.usjt.sistema_automatizado.model.enums.HomeRole;
+import com.usjt.sistema_automatizado.repository.AppUserRepository;
 import com.usjt.sistema_automatizado.repository.DeviceRepository;
 import com.usjt.sistema_automatizado.repository.HomeMemberRepository;
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class DeviceService {
 
+    private final AppUserRepository  appUserRepository;
     private final DeviceRepository deviceRepository;
     private final HomeMemberRepository homeMemberRepository;
     private final DeviceMapper deviceMapper;
@@ -58,5 +67,54 @@ public class DeviceService {
         return deviceRepository.findByHomeId(homeId).stream()
                 .map(deviceMapper::toResponse)
                 .toList();
+    }
+    @Transactional
+    public DeviceResponse processHeartbeat(TelemetryRequest request) {
+        // 1. Procura o dispositivo pelo deviceId enviado no payload de telemetria
+        Device device = deviceRepository.findByExternalId(request.deviceId())
+                .orElseThrow(() -> new IllegalArgumentException("Dispositivo não encontrado com o identificador externo fornecido."));
+
+        // 2. Atualiza o estado para ONLINE
+        device.setStatus(DeviceStatus.ONLINE);
+
+        // 3. Persiste a alteração na base de dados
+        Device updatedDevice = deviceRepository.save(device);
+
+        // 4. Retorna a resposta DTO
+        return deviceMapper.toResponse(updatedDevice);
+    }
+    @Transactional
+    public CommandResponse sendCommand(Long deviceId, CommandRequest request, Long requesterId) {
+        // 1. Busca o dispositivo
+        Device device = deviceRepository.findById(deviceId)
+                .orElseThrow(() -> new EntityNotFoundException("Dispositivo não encontrado."));
+
+        // 2. Proteção de Hardware: Bloqueia comandos se o ESP32 estiver offline
+        if (device.getStatus() == com.usjt.sistema_automatizado.model.enums.DeviceStatus.OFFLINE) {
+            throw new IllegalArgumentException(
+                    "Não é possível enviar o comando. O dispositivo '" + device.getName() + "' está OFFLINE."
+            );
+        }
+
+        // 3. Segurança: Garante que o utilizador pertence à casa (ADMIN ou FAMILY podem ligar luzes/ventilação)
+        homeMemberRepository.findByHomeIdAndUserId(device.getHome().getId(), requesterId)
+                .orElseThrow(() -> new IllegalArgumentException("Não tem acesso aos dispositivos desta casa."));
+
+        AppUser requester = appUserRepository.findById(requesterId)
+                .orElseThrow(() -> new EntityNotFoundException("Utilizador não encontrado."));
+
+        // 4. Integração IoT (Espaço reservado para as Etapas 12 a 15)
+        // NOTA: É exatamente aqui que o backend vai publicar a mensagem no broker MQTT
+        // Exemplo futuro: mqttGateway.publish("homes/" + homeId + "/devices/" + externalId + "/rx", jsonPayload);
+
+        String commandStatus = "DISPATCHED"; // Como o MQTT com QoS 1 garante a entrega, assumimos despachado.
+
+        return new CommandResponse(
+                device.getExternalId(),
+                request.type(),
+                commandStatus,
+                LocalDateTime.now(ZoneOffset.UTC),
+                requester.getName()
+        );
     }
 }

@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -29,7 +30,7 @@ public class EventController {
     public ResponseEntity<List<EventResponse>> getHomeEvents(
             @PathVariable Long homeId,
             @RequestParam(defaultValue = "false") boolean pendingOnly,
-            @RequestHeader("X-User-Id") Long requesterId
+            @AuthenticationPrincipal Long requesterId
     ) {
         return ResponseEntity.ok(eventService.getHomeEvents(homeId, requesterId, pendingOnly));
     }
@@ -38,7 +39,7 @@ public class EventController {
     @PatchMapping("/events/{id}/acknowledge")
     public ResponseEntity<EventResponse> acknowledgeEvent(
             @PathVariable Long id,
-            @RequestHeader("X-User-Id") Long requesterId
+            @AuthenticationPrincipal Long requesterId
     ) {
         return ResponseEntity.ok(eventService.acknowledgeEvent(id, requesterId));
     }
