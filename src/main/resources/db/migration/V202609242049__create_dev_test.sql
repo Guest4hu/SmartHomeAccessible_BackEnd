@@ -15,4 +15,4 @@ VALUES (1, 1, 'ADMIN', UTC_TIMESTAMP());
 -- 4. Criar um Dispositivo de Teste para poder testar a Automação e Eventos
 -- O banco de dados atribuirá o ID 1 a este dispositivo, ligado à Casa 1
 INSERT INTO device (external_id, name, room, status, home_id, created_at) 
-VALUES ('esp32-sala-01', 'Sensor Principal', 'Sala de Estar', 'OFFLINE', 1, UTC_TIMESTAMP());
+VALUES ('esp32-100100C40A24', 'Sensor Principal', 'Sala de Estar', 'ONLINE', 1, UTC_TIMESTAMP());

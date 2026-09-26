@@ -7,6 +7,12 @@ public enum EventType
     HIGH_TEMPERATURE,
     DEVICE_ONLINE,
     DEVICE_OFFLINE,
+    // Confirmações bidirecionais de comando enviado pelo backend ao ESP32
+    COMMAND_SUCCESS,
+    COMMAND_FAILED,
+    // Confirmações de recebimento de arquivo/firmware enviado ao ESP32
+    FILE_RECEIVED,
+    FILE_ERROR,
     UNKNOWN_EVENT;
 
     // Método utilitário para converter a String que vem do JSON de forma segura

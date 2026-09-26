@@ -28,8 +28,19 @@ public class MqttConfig {
     public MqttPahoClientFactory mqttClientFactory() {
         DefaultMqttPahoClientFactory factory = new DefaultMqttPahoClientFactory();
         MqttConnectOptions options = new MqttConnectOptions();
+
         options.setServerURIs(new String[]{brokerUrl});
         options.setCleanSession(true);
+
+        // 1. AUTO RECONNECT: Se o broker derrubar (EOFException), o Java tenta reconectar sozinho!
+        options.setAutomaticReconnect(true);
+
+        // 2. KEEP ALIVE: O Java manda um "PING" a cada 60 segundos para o broker não o considerar ocioso
+        options.setKeepAliveInterval(60);
+
+        // 3. TIMEOUT: Se a internet falhar, ele desiste em 10 segundos em vez de travar a thread
+        options.setConnectionTimeout(10);
+
         factory.setConnectionOptions(options);
         return factory;
     }

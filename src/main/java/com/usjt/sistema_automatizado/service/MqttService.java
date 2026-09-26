@@ -21,9 +21,11 @@ public class MqttService {
     // ==========================================
     // OUTBOUND: ENVIAR COMANDOS PARA O ESP32
     // ==========================================
-    public void sendCommand(String topic, String jsonPayload) {
+    public void sendCommand(String externalId, String jsonPayload) {
+        // Monta o tópico no formato correto: devices/{externalId}/cmd
+        String topic = "devices/" + externalId + "/cmd";
         log.info("[MQTT] A enviar comando para {}: {}", topic, jsonPayload);
-        mqttGateway.sendToMqtt(topic,jsonPayload);
+        mqttGateway.sendToMqtt(topic, jsonPayload);
     }
 
     // ==========================================

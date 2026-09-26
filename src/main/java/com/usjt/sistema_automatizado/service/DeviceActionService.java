@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.UUID;
 
 
 @Service
@@ -31,8 +32,11 @@ public class DeviceActionService {
     private final AppUserRepository appUserRepository;
     private final DeviceActionMapper commandMapper;
     private final MqttService mqttService;
+    private final CommandAckService commandAckService;
 
-    @Transactional
+    // Não usar @Transactional aqui: o método bloqueia aguardando o ACK do firmware
+    // por até 5 segundos. Manter uma transação JPA aberta durante esse período
+    // seguraria a conexão do pool desnecessariamente.
     public CommandResponse sendCommand(Long deviceId, CommandRequest request, Long requesterId) {
         // 1. Busca o dispositivo
         Device device = deviceRepository.findById(deviceId)
@@ -52,17 +56,26 @@ public class DeviceActionService {
         AppUser requester = appUserRepository.findById(requesterId)
                 .orElseThrow(() -> new EntityNotFoundException("Utilizador não encontrado."));
 
-        // 4. Converte o request para JSON usando o Mapper
-        String jsonPayload = commandMapper.toCommandJson(request);
+        // 4. Gera um UUID único para esta requisição (correlationId).
+        //    O firmware ecoa este ID na confirmação, permitindo ao backend
+        //    identificar exatamente qual Future deve ser resolvido,
+        //    sem interferência de eventos físicos (DOORBELL, PRESENCE, etc.).
+        String correlationId = UUID.randomUUID().toString();
 
-        // 5. Dispara para o hardware via MQTT
+        // 5. Converte o request para JSON com o correlationId embutido
+        String jsonPayload = commandMapper.toCommandJson(request, correlationId);
+
+        // 6. Publica o comando no MQTT
         mqttService.sendCommand(device.getExternalId(), jsonPayload);
 
-        // 6. Retorna a resposta padronizada
+        // 7. Aguarda a confirmação do firmware pelo correlationId específico (até 5s)
+        String ackStatus = commandAckService.aguardarAck(correlationId);
+
+        // 8. Retorna a resposta com o status real de entrega ao dispositivo
         return new CommandResponse(
                 device.getExternalId(),
                 request.type(),
-                "DISPATCHED",
+                ackStatus,
                 LocalDateTime.now(ZoneOffset.UTC),
                 requester.getName()
         );

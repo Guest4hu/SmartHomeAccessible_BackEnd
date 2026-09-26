@@ -55,4 +55,14 @@ public class MqttMessageMapper {
         JsonNode node = objectMapper.readTree(envelope.jsonPayload());
         return node.path("type").asText("UNKNOWN_EVENT");
     }
+
+    /**
+     * Extrai o correlationId do payload de uma confirmação do firmware.
+     * Retorna string vazia se o campo não existir (eventos físicos espontâneos
+     * como DOORBELL não carregam correlationId).
+     */
+    public String extrairCorrelationId(MqttEnvelope envelope) throws Exception {
+        JsonNode node = objectMapper.readTree(envelope.jsonPayload());
+        return node.path("correlationId").asText("");
+    }
 }
