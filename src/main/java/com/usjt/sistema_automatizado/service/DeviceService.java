@@ -1,5 +1,6 @@
 package com.usjt.sistema_automatizado.service;
 
+import com.usjt.sistema_automatizado.config.mqtt.MqttGateway;
 import com.usjt.sistema_automatizado.dto.request.CommandRequest;
 import com.usjt.sistema_automatizado.dto.request.DeviceRequest;
 import com.usjt.sistema_automatizado.dto.request.TelemetryRequest;
@@ -31,6 +32,7 @@ public class DeviceService {
     private final DeviceRepository deviceRepository;
     private final HomeMemberRepository homeMemberRepository;
     private final DeviceMapper deviceMapper;
+    private final com.usjt.sistema_automatizado.config.mqtt.MqttGateway  mqttGateway;
 
     @Transactional
     public DeviceResponse createDevice(Long homeId, DeviceRequest request, Long requesterId) {
@@ -104,16 +106,25 @@ public class DeviceService {
                 .orElseThrow(() -> new EntityNotFoundException("Utilizador não encontrado."));
 
         // 4. Integração IoT (Espaço reservado para as Etapas 12 a 15)
-        // NOTA: É exatamente aqui que o backend vai publicar a mensagem no broker MQTT
-        // Exemplo futuro: mqttGateway.publish("homes/" + homeId + "/devices/" + externalId + "/rx", jsonPayload);
+        // ======= DISPARO PARA O HARDWARE VIA MQTT =======
 
-        String commandStatus = "DISPATCHED"; // Como o MQTT com QoS 1 garante a entrega, assumimos despachado.
+        // 1. O tópico exato que o ESP32 escuta
+        String topic = "devices/" + device.getExternalId() + "/cmd";
+
+        // 2. Transforma o enum TURN_ON/TURN_OFF no padrão que o C++ espera (FAN_ON/FAN_OFF)
+        String actionValue = request.type().name().equals("TURN_ON") ? "FAN_ON" : "FAN_OFF";
+        String jsonPayload = "{ \"action\": \"" + actionValue + "\" }";
+
+        // 3. Envia para a nuvem
+        mqttGateway.sendToMqtt(topic, jsonPayload);
+
+        // ==================================================
 
         return new CommandResponse(
                 device.getExternalId(),
                 request.type(),
-                commandStatus,
-                LocalDateTime.now(ZoneOffset.UTC),
+                "DISPATCHED", // <--- Mantemos o status como despachado
+                java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
                 requester.getName()
         );
     }
