@@ -15,6 +15,6 @@ api:
       expiration: ${JWT_EXPIRATION}
 mqtt:
   broker:
-    url: tcp://broker.hivemq.com:1883
+    url: tcp://broker.emqx.io:1883
   client:
     id: ${CLIENT_ID}
