@@ -4,6 +4,7 @@ import com.usjt.sistema_automatizado.dto.request.CommandRequest;
 import com.usjt.sistema_automatizado.dto.request.TelemetryRequest;
 import com.usjt.sistema_automatizado.dto.response.CommandResponse;
 import com.usjt.sistema_automatizado.dto.response.DeviceResponse;
+import com.usjt.sistema_automatizado.service.DeviceActionService;
 import com.usjt.sistema_automatizado.service.DeviceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -16,11 +17,11 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class DeviceActionController {
 
-    private final DeviceService deviceService;
+    private final DeviceActionService deviceActionService;
 
     @PostMapping("/active")
     public ResponseEntity<DeviceResponse> receiveHeartbeat(@RequestBody @Valid TelemetryRequest request) {
-        DeviceResponse response = deviceService.processHeartbeat(request);
+        DeviceResponse response = deviceActionService.processHeartbeat(request);
         return ResponseEntity.ok(response);
     }
     @PostMapping("/{deviceId}/commands")
@@ -29,7 +30,7 @@ public class DeviceActionController {
             @Valid @RequestBody CommandRequest request,
             @AuthenticationPrincipal Long requesterId
     ) {
-        CommandResponse response = deviceService.sendCommand(deviceId, request, requesterId);
+        CommandResponse response = deviceActionService.sendCommand(deviceId, request, requesterId);
         return ResponseEntity.ok(response);
     }
 }
