@@ -9,4 +9,8 @@ public record CommandRequest(
 
         // Campo opcional: Usado caso o comando exija um valor numérico (ex: intensidade do LED)
         Double value
-) {}
+) {
+    public CommandRequest(CommandType type) {
+        this(type, null);
+    }
+}
