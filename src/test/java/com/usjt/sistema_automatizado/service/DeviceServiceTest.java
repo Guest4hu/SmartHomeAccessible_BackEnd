@@ -11,6 +11,7 @@ import com.usjt.sistema_automatizado.model.enums.DeviceStatus;
 import com.usjt.sistema_automatizado.model.enums.HomeRole;
 import com.usjt.sistema_automatizado.repository.DeviceRepository;
 import com.usjt.sistema_automatizado.repository.HomeMemberRepository;
+import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -149,4 +150,94 @@ class DeviceServiceTest {
         verify(deviceRepository, times(1)).findByHomeId(homeId); // Validou se pesquisou no banco pelo ID da casa
     }
 
+    @Test
+    void updateDeviceStatus_DeveAtualizarStatusELastSeenAt_QuandoDispositivoExistir() {
+        // Arrange
+        String externalId = "esp32-sala-01";
+        Device device = new Device();
+        device.setId(1L);
+        device.setExternalId(externalId);
+        device.setStatus(DeviceStatus.OFFLINE);
+
+        when(deviceRepository.findByExternalId(externalId)).thenReturn(Optional.of(device));
+        when(deviceRepository.save(device)).thenReturn(device);
+
+        // Act
+        deviceService.updateDeviceStatus(externalId, DeviceStatus.ONLINE);
+
+        // Assert
+        assertEquals(DeviceStatus.ONLINE, device.getStatus());
+        assertNotNull(device.getLastSeenAt());
+        verify(deviceRepository, times(1)).save(device);
+    }
+
+    @Test
+    void updateDeviceStatus_DeveLancarExcecao_QuandoDispositivoNaoExistir() {
+        // Arrange
+        String externalId = "esp32-inexistente";
+        when(deviceRepository.findByExternalId(externalId)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThrows(EntityNotFoundException.class,
+                () -> deviceService.updateDeviceStatus(externalId, DeviceStatus.ONLINE));
+        verify(deviceRepository, never()).save(any());
+    }
+
+    @Test
+    void processHeartbeat_DeveAtualizarStatusParaOnlineELastSeenAt_QuandoDispositivoExistir() {
+        // Arrange
+        String deviceId = "esp32-dht11-01";
+        TelemetryRequest request = new TelemetryRequest(
+                1,
+                deviceId,
+                LocalDateTime.now(),
+                25.5,
+                60.0,
+                450.0
+        );
+
+        Device device = new Device();
+        device.setId(10L);
+        device.setExternalId(deviceId);
+        device.setStatus(DeviceStatus.OFFLINE);
+
+        DeviceResponse expectedResponse = mock(DeviceResponse.class);
+
+        when(deviceRepository.findByExternalId(deviceId)).thenReturn(Optional.of(device));
+        when(deviceRepository.save(device)).thenReturn(device);
+        when(deviceMapper.toResponse(device)).thenReturn(expectedResponse);
+
+        // Act
+        DeviceResponse actualResponse = deviceService.processHeartbeat(request);
+
+        // Assert
+        assertNotNull(actualResponse);
+        assertEquals(DeviceStatus.ONLINE, device.getStatus());
+        assertNotNull(device.getLastSeenAt());
+        verify(deviceRepository, times(1)).save(device);
+        verify(deviceMapper, times(1)).toResponse(device);
+    }
+
+    @Test
+    void processHeartbeat_DeveLancarExcecao_QuandoDispositivoNaoEncontrado() {
+        // Arrange
+        String deviceId = "esp32-inexistente";
+        TelemetryRequest request = new TelemetryRequest(
+                1,
+                deviceId,
+                LocalDateTime.now(),
+                null, null, null
+        );
+
+        when(deviceRepository.findByExternalId(deviceId)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> deviceService.processHeartbeat(request)
+        );
+
+        assertEquals("Dispositivo não encontrado com o identificador externo fornecido.", exception.getMessage());
+        verify(deviceRepository, never()).save(any());
+    }
 }

@@ -1,17 +1,13 @@
 package com.usjt.sistema_automatizado.service;
 
-import com.usjt.sistema_automatizado.dto.request.CommandRequest;
 import com.usjt.sistema_automatizado.dto.request.DeviceRequest;
 import com.usjt.sistema_automatizado.dto.request.TelemetryRequest;
-import com.usjt.sistema_automatizado.dto.response.CommandResponse;
 import com.usjt.sistema_automatizado.dto.response.DeviceResponse;
 import com.usjt.sistema_automatizado.mapper.DeviceMapper;
-import com.usjt.sistema_automatizado.model.entity.AppUser;
 import com.usjt.sistema_automatizado.model.entity.Device;
 import com.usjt.sistema_automatizado.model.entity.HomeMember;
 import com.usjt.sistema_automatizado.model.enums.DeviceStatus;
 import com.usjt.sistema_automatizado.model.enums.HomeRole;
-import com.usjt.sistema_automatizado.repository.AppUserRepository;
 import com.usjt.sistema_automatizado.repository.DeviceRepository;
 import com.usjt.sistema_automatizado.repository.HomeMemberRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -27,11 +23,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DeviceService {
 
-    private final AppUserRepository  appUserRepository;
     private final DeviceRepository deviceRepository;
     private final HomeMemberRepository homeMemberRepository;
     private final DeviceMapper deviceMapper;
-    private final MqttService mqttService;
 
     @Transactional
     public DeviceResponse createDevice(Long homeId, DeviceRequest request, Long requesterId) {
@@ -68,5 +62,26 @@ public class DeviceService {
         return deviceRepository.findByHomeId(homeId).stream()
                 .map(deviceMapper::toResponse)
                 .toList();
+    }
+
+    @Transactional
+    public void updateDeviceStatus(String externalId, DeviceStatus status) {
+        Device device = deviceRepository.findByExternalId(externalId)
+                .orElseThrow(() -> new EntityNotFoundException("Dispositivo não encontrado: " + externalId));
+        device.setStatus(status);
+        device.setLastSeenAt(LocalDateTime.now(ZoneOffset.UTC));
+        deviceRepository.save(device);
+    }
+
+    @Transactional
+    public DeviceResponse processHeartbeat(TelemetryRequest request) {
+        Device device = deviceRepository.findByExternalId(request.deviceId())
+                .orElseThrow(() -> new IllegalArgumentException("Dispositivo não encontrado com o identificador externo fornecido."));
+
+        device.setStatus(DeviceStatus.ONLINE);
+        device.setLastSeenAt(LocalDateTime.now(ZoneOffset.UTC));
+        Device updatedDevice = deviceRepository.save(device);
+
+        return deviceMapper.toResponse(updatedDevice);
     }
 }
