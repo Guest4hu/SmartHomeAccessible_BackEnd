@@ -4,6 +4,9 @@ import com.usjt.sistema_automatizado.model.entity.HomeMember;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -18,4 +21,8 @@ public interface HomeMemberRepository extends JpaRepository<HomeMember, Long> {
 
     // Para gestão pelo ADMIN: Lista todos os membros de uma determinada casa
     List<HomeMember> findByHomeId(Long homeId);
+
+    // Usado pela notificação: Obtém diretamente os IDs dos usuários membros da casa
+    @Query("SELECT hm.user.id FROM HomeMember hm WHERE hm.home.id = :homeId")
+    List<Long> findUserIdsByHomeId(@Param("homeId") Long homeId);
 }

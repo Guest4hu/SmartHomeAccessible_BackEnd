@@ -3,6 +3,8 @@ package com.usjt.sistema_automatizado.service;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.usjt.sistema_automatizado.repository.DeviceRepository;
+import com.usjt.sistema_automatizado.repository.HomeMemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -12,6 +14,9 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 @Slf4j
@@ -20,72 +25,118 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class NotificationService {
 
     private final ObjectMapper objectMapper;
+    private final DeviceRepository deviceRepository;
+    private final HomeMemberRepository homeMemberRepository;
 
-    // Lista Thread-Safe para guardar todos os utilizadores/navegadores conectados
-    private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
+    // Mapa Thread-Safe indexado por ID de usuário: permite múltiplas abas/aparelhos por morador
+    private final Map<Long, List<SseEmitter>> userEmitters = new ConcurrentHashMap<>();
 
     public record NotificationPayload(
+            Long homeId,
             String deviceId,
             String event,
             @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
             LocalDateTime timestamp
     ) {
+        public NotificationPayload(Long homeId, String deviceId, String event) {
+            this(homeId, deviceId, event, LocalDateTime.now(ZoneOffset.UTC));
+        }
+
         public NotificationPayload(String deviceId, String event) {
-            this(deviceId, event, LocalDateTime.now(ZoneOffset.UTC));
+            this(null, deviceId, event, LocalDateTime.now(ZoneOffset.UTC));
         }
     }
 
-    // Método que o Controller usa para inscrever um novo navegador
-    public SseEmitter subscribe() {
-        // Cria uma conexão com timeout de 60 minutos
-        SseEmitter emitter = new SseEmitter(60 * 60 * 1000L);
-        emitters.add(emitter);
+    // Registra conexão SSE vinculada ao usuário autenticado
+    public SseEmitter subscribe(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("Identificador de usuário é obrigatório para conexão SSE.");
+        }
 
-        // Limpeza automática quando o utilizador fechar a aba
-        emitter.onCompletion(() -> emitters.remove(emitter));
-        emitter.onTimeout(() -> emitters.remove(emitter));
-        emitter.onError((e) -> emitters.remove(emitter));
+        // Conexão com timeout de 60 minutos
+        SseEmitter emitter = new SseEmitter(60 * 60 * 1000L);
+        userEmitters.computeIfAbsent(userId, k -> new CopyOnWriteArrayList<>()).add(emitter);
+
+        Runnable cleanup = () -> removeEmitter(userId, emitter);
+        emitter.onCompletion(cleanup);
+        emitter.onTimeout(cleanup);
+        emitter.onError(e -> cleanup.run());
 
         return emitter;
     }
 
-    // Método compatível mantido com nome padrão ("bell-ring")
+    // Remove conexão desconectada e limpa chave do mapa se não houver mais emissores ativos
+    private void removeEmitter(Long userId, SseEmitter emitter) {
+        List<SseEmitter> emitters = userEmitters.get(userId);
+        if (emitters != null) {
+            emitters.remove(emitter);
+            if (emitters.isEmpty()) {
+                userEmitters.remove(userId, emitters);
+            }
+        }
+    }
+
+    // Dispara evento com nome padrão ("bell-ring")
     public void dispatchEvent(String deviceId, String eventType) {
         dispatchEvent("bell-ring", deviceId, eventType);
     }
 
-    // Sobrecarga para permitir nomes customizados caso o frontend evolua
+    // Dispara evento descobrindo a residência do dispositivo e notificando apenas seus moradores
     public void dispatchEvent(String sseEventName, String deviceId, String eventType) {
-        NotificationPayload payload = new NotificationPayload(deviceId, eventType, LocalDateTime.now(ZoneOffset.UTC));
-        dispatchEvent(sseEventName, payload);
+        Optional<Long> homeIdOpt = deviceRepository.findHomeIdByExternalId(deviceId);
+        if (homeIdOpt.isEmpty()) {
+            log.warn("[Notification] Dispositivo {} não encontrado; notificação SSE ignorada.", deviceId);
+            return;
+        }
+
+        Long homeId = homeIdOpt.get();
+        NotificationPayload payload = new NotificationPayload(homeId, deviceId, eventType, LocalDateTime.now(ZoneOffset.UTC));
+        dispatchToHome(homeId, sseEventName, payload);
     }
 
-    // Sobrecarga aceitando diretamente o payload estruturado
-    public void dispatchEvent(String sseEventName, NotificationPayload payload) {
+    // Despacha o evento exclusivamente para os membros cadastrados na residência
+    public void dispatchToHome(Long homeId, String sseEventName, NotificationPayload payload) {
+        List<Long> memberUserIds = homeMemberRepository.findUserIdsByHomeId(homeId);
+        if (memberUserIds.isEmpty()) {
+            log.debug("[Notification] Residência {} não possui moradores cadastrados.", homeId);
+            return;
+        }
+
+        String jsonPayload;
         try {
-            String jsonPayload = objectMapper.writeValueAsString(payload);
-            for (SseEmitter emitter : emitters) {
-                try {
-                    // Envia o JSON para o navegador com o nome de evento especificado
-                    emitter.send(SseEmitter.event()
-                            .name(sseEventName)
-                            .data(jsonPayload));
-                } catch (IOException | IllegalStateException e) {
-                    emitters.remove(emitter); // Se falhar (ex: conexão perdida), removemos da lista
+            jsonPayload = objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            log.error("[Notification] Erro ao serializar payload SSE para homeId={}: {}", homeId, e.getMessage(), e);
+            return;
+        }
+
+        for (Long userId : memberUserIds) {
+            List<SseEmitter> emitters = userEmitters.get(userId);
+            if (emitters != null && !emitters.isEmpty()) {
+                for (SseEmitter emitter : emitters) {
+                    try {
+                        emitter.send(SseEmitter.event()
+                                .name(sseEventName)
+                                .data(jsonPayload));
+                    } catch (IOException | IllegalStateException e) {
+                        removeEmitter(userId, emitter);
+                    }
                 }
             }
-        } catch (JsonProcessingException e) {
-            log.error("[Notification] Erro ao serializar payload SSE para deviceId={}: {}",
-                    payload.deviceId(), e.getMessage(), e);
         }
     }
 
     // Acessores package-private para testes unitários
-    void addEmitter(SseEmitter emitter) {
-        emitters.add(emitter);
+    void addEmitter(Long userId, SseEmitter emitter) {
+        userEmitters.computeIfAbsent(userId, k -> new CopyOnWriteArrayList<>()).add(emitter);
     }
 
     int getActiveEmittersCount() {
-        return emitters.size();
+        return userEmitters.values().stream().mapToInt(List::size).sum();
+    }
+
+    int getActiveEmittersCountForUser(Long userId) {
+        List<SseEmitter> emitters = userEmitters.get(userId);
+        return (emitters != null) ? emitters.size() : 0;
     }
 }
