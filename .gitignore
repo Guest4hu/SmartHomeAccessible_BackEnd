@@ -35,4 +35,5 @@ build/
 
 iaContext/
 .env.example
+.agents/
 

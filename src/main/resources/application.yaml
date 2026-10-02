@@ -11,10 +11,10 @@ spring:
 api:
   security:
     token:
-      secret: ${JWT_SECRET}
-      expiration: ${JWT_EXPIRATION}
+      secret: ${JWT_SECRET:umSegredoMuitoLongoParaOsTestesRodaremSemReclamarem123!}
+      expiration: ${JWT_EXPIRATION:86400000}
 mqtt:
   broker:
     url: tcp://broker.emqx.io:1883
   client:
-    id: ${CLIENT_ID}
+    id: ${CLIENT_ID:backend-smart-home-tx}
