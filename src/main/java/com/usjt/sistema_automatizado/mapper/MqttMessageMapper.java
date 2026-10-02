@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.usjt.sistema_automatizado.dto.MqttEnvelope;
 import com.usjt.sistema_automatizado.dto.request.EventRequest;
 import com.usjt.sistema_automatizado.dto.request.TelemetryRequest;
-import com.usjt.sistema_automatizado.model.entity.Event;
 import com.usjt.sistema_automatizado.model.enums.EventType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -17,7 +16,7 @@ import java.time.ZoneOffset;
 @RequiredArgsConstructor
 public class MqttMessageMapper {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     // Transforma o Envelope de Rede no DTO de Telemetria
     public TelemetryRequest toTelemetryRequest(MqttEnvelope envelope) throws Exception {

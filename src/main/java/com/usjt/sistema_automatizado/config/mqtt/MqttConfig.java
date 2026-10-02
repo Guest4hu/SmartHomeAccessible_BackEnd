@@ -69,7 +69,7 @@ public class MqttConfig {
         // O símbolo "+" é o wildcard do MQTT: significa "escuta QUALQUER deviceId"
         MqttPahoMessageDrivenChannelAdapter adapter =
                 new MqttPahoMessageDrivenChannelAdapter(clientId + "-rx", mqttClientFactory(),
-                        "devices/+/telemetry", "devices/+/event");
+                        "devices/+/telemetry", "devices/+/event", "devices/+/status");
 
         adapter.setCompletionTimeout(5000);
         adapter.setConverter(new DefaultPahoMessageConverter());
