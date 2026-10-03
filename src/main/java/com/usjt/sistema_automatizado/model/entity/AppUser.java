@@ -8,6 +8,12 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
+/**
+ * Entidade representativa de um usuário autenticável na plataforma.
+ *
+ * <p>Contém as credenciais de identificação primária (e-mail único e hash BCrypt de senha),
+ * servindo de base para a emissão e validação de tokens JWT na camada de segurança.</p>
+ */
 @Entity
 @Table(name = "app_user")
 @Getter

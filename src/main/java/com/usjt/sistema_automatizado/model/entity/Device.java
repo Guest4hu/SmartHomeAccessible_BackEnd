@@ -11,6 +11,13 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
+/**
+ * Entidade representativa de um microcontrolador (ESP32) associado a uma residência.
+ *
+ * <p>O {@code externalId} é derivado do hardware (MAC efuse do chip) para garantir unicidade
+ * global sem dependência de credenciais embutidas em tempo de compilação. O ciclo de conectividade
+ * é sincronizado via mensagens LWT retidas no tópico MQTT de status ({@code ONLINE}/{@code OFFLINE}).</p>
+ */
 @Entity
 @Table(name = "device")
 @Getter

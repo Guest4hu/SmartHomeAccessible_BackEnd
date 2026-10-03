@@ -10,6 +10,9 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
+/**
+ * Serviço de geração, assinatura e validação criptográfica de tokens JWT (JSON Web Tokens).
+ */
 @Service
 public class TokenService {
 
@@ -23,7 +26,12 @@ public class TokenService {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    // Gera o token guardando o ID do utilizador no "subject"
+    /**
+     * Emite um token JWT assinado contendo o identificador do usuário como subject claim.
+     *
+     * @param userId identificador do usuário autenticado
+     * @return representação compactada em String do token JWT
+     */
     public String generateToken(Long userId) {
         return Jwts.builder()
                 .subject(userId.toString())
@@ -33,7 +41,12 @@ public class TokenService {
                 .compact();
     }
 
-    // Valida se o token foi assinado por nós e se não expirou
+    /**
+     * Verifica a integridade criptográfica da assinatura e se o token não expirou.
+     *
+     * @param token token JWT em formato compacto
+     * @return {@code true} se o token for autêntico e válido
+     */
     public boolean isTokenValid(String token) {
         try {
             Jwts.parser()
@@ -46,7 +59,12 @@ public class TokenService {
         }
     }
 
-    // Extrai o ID do utilizador de dentro do token
+    /**
+     * Extrai o identificador de usuário armazenado no subject do token JWT.
+     *
+     * @param token token JWT validado
+     * @return identificador do usuário (userId)
+     */
     public Long extractUserId(String token) {
         Claims claims = Jwts.parser()
                 .verifyWith(getSigningKey())

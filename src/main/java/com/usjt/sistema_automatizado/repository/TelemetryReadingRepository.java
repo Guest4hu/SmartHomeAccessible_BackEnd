@@ -10,10 +10,21 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Repositório de acesso a dados para leituras de séries temporais de sensores ambientais.
+ */
 @Repository
 public interface TelemetryReadingRepository extends JpaRepository<TelemetryReading, Long> {
 
-    // 1. Busca os pontos para desenhar o gráfico (filtrado por período e ordenado por data)
+    /**
+     * Recupera os pontos de leitura ordenados cronologicamente para composição de gráficos e agregações.
+     *
+     * @param deviceId identificador interno do dispositivo
+     * @param metric tipo de métrica consultada (ex: TEMPERATURE, HUMIDITY)
+     * @param from limite inicial do intervalo temporal em UTC
+     * @param to limite final do intervalo temporal em UTC
+     * @return lista ordenada de leituras de telemetria
+     */
     List<TelemetryReading> findByDeviceIdAndMetricAndRecordedAtBetweenOrderByRecordedAtAsc(
             Long deviceId,
             MetricType metric,
@@ -21,7 +32,12 @@ public interface TelemetryReadingRepository extends JpaRepository<TelemetryReadi
             LocalDateTime to
     );
 
-    // 2. Busca apenas as métricas que o dispositivo já registou (para o dropdown do frontend)
+    /**
+     * Retorna os tipos distintos de métricas já registrados pelo dispositivo para popular filtros de interface.
+     *
+     * @param deviceId identificador interno do dispositivo
+     * @return lista de tipos de métricas com histórico no banco
+     */
     @Query("SELECT DISTINCT t.metric FROM TelemetryReading t WHERE t.device.id = :deviceId")
     List<MetricType> findDistinctMetricsByDeviceId(@Param("deviceId") Long deviceId);
 }

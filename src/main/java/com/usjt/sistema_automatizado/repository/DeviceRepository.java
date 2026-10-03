@@ -10,16 +10,35 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Repositório de persistência e consulta de dispositivos IoT (ESP32).
+ */
 @Repository
 public interface DeviceRepository extends JpaRepository<Device, Long> {
 
-    // Usado pela Telemetria e Eventos para encontrar o dispositivo pelo ID que o ESP32 envia
+    /**
+     * Localiza a entidade pelo identificador de hardware único embutido de fábrica (MAC efuse).
+     *
+     * @param externalId identificador de hardware (ex: "esp32-100100C40A24")
+     * @return Optional contendo o dispositivo se encontrado
+     */
     Optional<Device> findByExternalId(String externalId);
 
-    // Usado para listar todos os dispositivos de uma casa específica
+    /**
+     * Lista todos os dispositivos registrados no escopo de uma residência.
+     *
+     * @param homeId identificador da casa
+     * @return lista de dispositivos pertencentes à residência
+     */
     List<Device> findByHomeId(Long homeId);
 
-    // Usado para identificar diretamente a casa vinculada ao dispositivo sem sobrecarga de JOIN
+    /**
+     * Projeção otimizada para identificar a residência vinculada ao hardware sem carregar a entidade completa.
+     * Utilizado para resolução rápida de tenancy em notificações SSE.
+     *
+     * @param externalId identificador de hardware enviado no tópico MQTT
+     * @return Optional com o ID da casa vinculada
+     */
     @Query("SELECT d.home.id FROM Device d WHERE d.externalId = :externalId")
     Optional<Long> findHomeIdByExternalId(@Param("externalId") String externalId);
 }

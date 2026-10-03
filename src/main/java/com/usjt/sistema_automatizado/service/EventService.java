@@ -19,6 +19,12 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
+/**
+ * Serviço responsável pelo ciclo de vida de eventos, disparos de sensores e confirmações de alertas acessíveis.
+ *
+ * <p>Centraliza a persistência de acionamentos de campainha e o mecanismo de confirmação de leitura
+ * que previne duplicidade de atendimento por moradores da mesma residência.</p>
+ */
 @Service
 @RequiredArgsConstructor
 public class EventService {
@@ -29,7 +35,13 @@ public class EventService {
     private final AppUserRepository appUserRepository;
     private final EventMapper eventMapper;
 
-    // 1. Simula a receção do toque da campainha do ESP32
+    /**
+     * Registra um novo evento emitido pelo hardware (campainha, detecção de presença ou confirmação).
+     *
+     * @param request dados do evento e identificador de hardware do dispositivo emissor
+     * @return DTO com o evento persistido
+     * @throws EntityNotFoundException se o dispositivo não for localizado pelo externalId
+     */
     @Transactional
     public EventResponse createEvent(EventRequest request) {
         Device device = deviceRepository.findByExternalId(request.deviceId())
@@ -38,13 +50,18 @@ public class EventService {
         Event event = eventMapper.toEntity(request, device);
         Event savedEvent = eventRepository.save(event);
 
-        // NOTA: Na Etapa 15, é exatamente aqui que vamos disparar o aviso via WebSocket/FCM
-        // para os telemóveis de todos os membros da casa.
-
         return eventMapper.toResponse(savedEvent);
     }
 
-    // 2. O painel web consulta os alertas (com opção de ver só os pendentes)
+    /**
+     * Consulta o histórico de eventos de uma residência com opção de filtrar apenas alertas não atendidos.
+     *
+     * @param homeId identificador da residência
+     * @param requesterId identificador do usuário solicitante
+     * @param pendingOnly se verdadeiro, retorna apenas eventos sem confirmação de leitura
+     * @return lista de eventos ordenada do mais recente para o mais antigo
+     * @throws IllegalArgumentException se o solicitante não pertencer à residência
+     */
     @Transactional(readOnly = true)
     public List<EventResponse> getHomeEvents(Long homeId, Long requesterId, boolean pendingOnly) {
         homeMemberRepository.findByHomeIdAndUserId(homeId, requesterId)
@@ -60,7 +77,15 @@ public class EventService {
         return events.stream().map(eventMapper::toResponse).toList();
     }
 
-    // 3. Acessibilidade: Um morador avisa o sistema que já viu a notificação
+    /**
+     * Registra a confirmação de que um morador visualizou o alerta acessível disparado pela campainha ou sensor.
+     *
+     * @param eventId identificador do evento
+     * @param requesterId identificador do morador que confirmou o atendimento
+     * @return evento atualizado com a data/hora em UTC e a identificação do morador
+     * @throws EntityNotFoundException se o evento ou usuário não existirem
+     * @throws IllegalArgumentException se o morador não pertencer à residência ou o alerta já estiver confirmado
+     */
     @Transactional
     public EventResponse acknowledgeEvent(Long eventId, Long requesterId) {
         Event event = eventRepository.findById(eventId)

@@ -17,6 +17,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Serviço responsável pela gestão de parâmetros de automação residencial e regras de histerese.
+ *
+ * <p>Protege a integridade física dos atuadores (relé do ventilador) garantindo que os limiares de acionamento
+ * configurem uma faixa operacional coerente e que apenas administradores da residência alterem parâmetros.</p>
+ */
 @Service
 @RequiredArgsConstructor
 public class AutomationConfigService {
@@ -27,6 +33,16 @@ public class AutomationConfigService {
     private final AppUserRepository appUserRepository;
     private final AutomationConfigMapper automationConfigMapper;
 
+    /**
+     * Recupera as configurações ativas de automação de um dispositivo.
+     * Permitido a todos os membros associados à residência (ADMIN e FAMILY).
+     *
+     * @param deviceId identificador interno do dispositivo
+     * @param requesterId identificador do usuário solicitante
+     * @return DTO com os limiares de histerese e padrões de iluminação
+     * @throws EntityNotFoundException se o dispositivo ou as configurações não existirem
+     * @throws IllegalArgumentException se o solicitante não pertencer à residência
+     */
     @Transactional(readOnly = true)
     public AutomationConfigResponse getConfig(Long deviceId, Long requesterId) {
         Device device = deviceRepository.findById(deviceId)
@@ -42,6 +58,21 @@ public class AutomationConfigService {
         return automationConfigMapper.toResponse(config);
     }
 
+    /**
+     * Atualiza os limiares operacionais de um dispositivo no banco de dados.
+     *
+     * <p><b>Validação de Histerese:</b> Exige estritamente {@code fanOnAbove > fanOffBelow} para proteger o
+     * relé e motor contra ciclagem rápida (comutação intermitente em variações de frações de grau).</p>
+     *
+     * <p><b>Controle de Acesso:</b> Operação restrita ao papel {@link HomeRole#ADMIN}.</p>
+     *
+     * @param deviceId identificador interno do dispositivo
+     * @param request novos limiares e parâmetros de automação
+     * @param requesterId identificador do usuário solicitante
+     * @return DTO com a configuração salva e atualizada
+     * @throws IllegalArgumentException se o limiar de ligar for menor ou igual ao de desligar, ou se o usuário não for ADMIN
+     * @throws EntityNotFoundException se o dispositivo ou usuário solicitante não existirem
+     */
     @Transactional
     public AutomationConfigResponse updateConfig(Long deviceId, AutomationConfigRequest request, Long requesterId) {
         // 1. Validação da Histerese (Proteção do Hardware)

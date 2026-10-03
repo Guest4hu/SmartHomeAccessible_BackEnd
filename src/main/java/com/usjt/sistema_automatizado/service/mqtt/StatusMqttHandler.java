@@ -8,6 +8,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+/**
+ * Processador especializado em mensagens recebidas no canal de status ({@code devices/{deviceId}/status}).
+ *
+ * <p>Responsável por atualizar o estado de conectividade dos dispositivos a partir de publicações
+ * de ciclo de vida e mensagens Last Will and Testament (LWT) retidas pelo broker MQTT.</p>
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

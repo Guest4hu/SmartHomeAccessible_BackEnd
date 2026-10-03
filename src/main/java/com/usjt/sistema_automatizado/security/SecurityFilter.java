@@ -13,6 +13,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+/**
+ * Filtro interceptor de segurança executado uma única vez por requisição HTTP.
+ *
+ * <p><b>Extração do Token JWT:</b> Suporta a recuperação do token via cabeçalho convencional
+ * ({@code Authorization: Bearer <token>}) e via parâmetro de consulta ({@code ?token=...}).
+ * O suporte ao parâmetro de consulta é uma decisão arquitetural mandatória para compatibilidade
+ * com a API nativa {@code EventSource} dos navegadores (utilizada no streaming de alertas SSE),
+ * que não permite a customização de cabeçalhos HTTP na inicialização da conexão.</p>
+ */
 @Component
 @RequiredArgsConstructor
 public class SecurityFilter extends OncePerRequestFilter {

@@ -19,6 +19,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
+/**
+ * Serviço responsável pelo cadastro, inventário e gestão de conectividade dos dispositivos IoT da residência.
+ */
 @Service
 @RequiredArgsConstructor
 public class DeviceService {
@@ -27,6 +30,18 @@ public class DeviceService {
     private final HomeMemberRepository homeMemberRepository;
     private final DeviceMapper deviceMapper;
 
+    /**
+     * Registra um novo dispositivo IoT vinculando o externalId de hardware à residência especificada.
+     *
+     * <p><b>Controle de Acesso:</b> Exclusivo para usuários com o papel {@link HomeRole#ADMIN}.
+     * O dispositivo inicia com status {@code OFFLINE} até que sua primeira mensagem seja processada.</p>
+     *
+     * @param homeId identificador da residência
+     * @param request dados do dispositivo (externalId, nome e cômodo)
+     * @param requesterId identificador do usuário solicitante
+     * @return DTO com os dados do dispositivo cadastrado
+     * @throws IllegalArgumentException se o solicitante não for ADMIN ou se o externalId já estiver em uso
+     */
     @Transactional
     public DeviceResponse createDevice(Long homeId, DeviceRequest request, Long requesterId) {
         // 1. Verifica se o solicitante pertence à casa
@@ -52,6 +67,14 @@ public class DeviceService {
         return deviceMapper.toResponse(savedDevice);
     }
 
+    /**
+     * Lista os dispositivos pertencentes a uma residência para membros autorizados (ADMIN ou FAMILY).
+     *
+     * @param homeId identificador da casa
+     * @param requesterId identificador do usuário autenticado
+     * @return lista com os dispositivos da casa
+     * @throws IllegalArgumentException se o solicitante não pertencer à residência
+     */
     @Transactional(readOnly = true)
     public List<DeviceResponse> listDevices(Long homeId, Long requesterId) {
         // 1. Verifica se tem acesso (ADMIN ou FAMILY podem ver a lista)
@@ -64,6 +87,14 @@ public class DeviceService {
                 .toList();
     }
 
+    /**
+     * Atualiza o estado de conectividade e o carimbo de última atividade (lastSeenAt) do dispositivo.
+     * Invocado principalmente pelo processamento de mensagens LWT via MQTT.
+     *
+     * @param externalId identificador de hardware do ESP32
+     * @param status novo estado (ONLINE ou OFFLINE)
+     * @throws EntityNotFoundException se o dispositivo não existir
+     */
     @Transactional
     public void updateDeviceStatus(String externalId, DeviceStatus status) {
         Device device = deviceRepository.findByExternalId(externalId)
@@ -73,6 +104,13 @@ public class DeviceService {
         deviceRepository.save(device);
     }
 
+    /**
+     * Processa o sinal de atividade (heartbeat) de um dispositivo comutando seu status para ONLINE.
+     *
+     * @param request dados do heartbeat contendo o externalId
+     * @return DTO com o dispositivo atualizado
+     * @throws IllegalArgumentException se o dispositivo não for encontrado
+     */
     @Transactional
     public DeviceResponse processHeartbeat(TelemetryRequest request) {
         Device device = deviceRepository.findByExternalId(request.deviceId())

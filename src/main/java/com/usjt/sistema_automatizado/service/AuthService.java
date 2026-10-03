@@ -7,6 +7,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+/**
+ * Serviço responsável pelo registro e gestão de credenciais de novos usuários.
+ */
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -14,6 +17,12 @@ public class AuthService {
     private final AppUserRepository userRepository;
     private final PasswordEncoder passwordEncoder; // Injetamos o BCrypt que configurou no SecurityConfig
 
+    /**
+     * Registra um novo usuário na plataforma aplicando hash BCrypt na senha informada.
+     *
+     * @param request dados cadastrais do novo usuário
+     * @throws IllegalArgumentException se o e-mail já estiver em uso no sistema
+     */
     public void register(RegisterRequest request) {
         // 1. Verifica se o e-mail já existe na base de dados
         if (userRepository.findByEmail(request.email()).isPresent()) {

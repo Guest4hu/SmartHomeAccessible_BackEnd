@@ -1,5 +1,8 @@
 package com.usjt.sistema_automatizado.model.enums;
 
+/**
+ * Comandos operacionais enviados pelo backend para execução nos atuadores do ESP32 via MQTT.
+ */
 public enum CommandType {
     TURN_ON,       // Ex: Ligar a ventilação manualmente
     TURN_OFF,      // Ex: Desligar a ventilação

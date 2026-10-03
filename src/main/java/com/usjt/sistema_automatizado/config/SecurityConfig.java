@@ -15,6 +15,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * Configuração de segurança HTTP da aplicação baseada em Spring Security.
+ *
+ * <p>Define uma política de sessão estritamente stateless (sem cookies de sessão ou estado em memória no servidor),
+ * desativa proteção CSRF (desnecessária em APIs RESTful protegidas por JWT) e cadastra o {@link SecurityFilter}
+ * antes do filtro de autenticação de credenciais padrão.</p>
+ */
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor

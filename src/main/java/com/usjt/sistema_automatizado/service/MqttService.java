@@ -10,6 +10,9 @@ import org.springframework.integration.mqtt.support.MqttHeaders;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Service;
 
+/**
+ * Serviço de adaptação de transporte MQTT, responsável pelo envio e recebimento de mensagens via Spring Integration.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -18,9 +21,12 @@ public class MqttService {
     private final MqttGateway mqttGateway;
     private final MqttRouterService routerService;
 
-    // ==========================================
-    // OUTBOUND: ENVIAR COMANDOS PARA O ESP32
-    // ==========================================
+    /**
+     * Publica um comando JSON no tópico MQTT padronizado do dispositivo ({@code devices/{externalId}/cmd}).
+     *
+     * @param externalId identificador de hardware do ESP32
+     * @param jsonPayload payload formatado contendo a ação e o correlationId
+     */
     public void sendCommand(String externalId, String jsonPayload) {
         // Monta o tópico no formato correto: devices/{externalId}/cmd
         String topic = "devices/" + externalId + "/" + MqttMessageType.COMMAND.getSuffix();
@@ -28,9 +34,11 @@ public class MqttService {
         mqttGateway.sendToMqtt(topic, jsonPayload);
     }
 
-    // ==========================================
-    // INBOUND: RECEBER DADOS DO ESP32
-    // ==========================================
+    /**
+     * Intercepta mensagens recebidas no canal de entrada MQTT, extrai metadados do tópico e encaminha ao roteador.
+     *
+     * @param message mensagem Spring contendo o payload e os cabeçalhos MQTT
+     */
     @ServiceActivator(inputChannel = "mqttInputChannel")
     public void handleIncomingMessage(Message<String> message) {
         String topic = message.getHeaders().get(MqttHeaders.RECEIVED_TOPIC).toString();

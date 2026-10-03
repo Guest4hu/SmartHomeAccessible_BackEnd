@@ -6,6 +6,9 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
+/**
+ * Repositório de persistência para as configurações de automação e histerese por dispositivo.
+ */
 @Repository
 public interface AutomationConfigRepository extends JpaRepository<AutomationConfig, Long> {
 

@@ -10,6 +10,13 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
+/**
+ * Entidade de série temporal para persistência contínua de leituras de sensores ambientais.
+ *
+ * <p>Utiliza formato longo (uma linha por métrica por instante), permitindo adicionar novos tipos
+ * de sensores sem alterações de schema relacional. A restrição de unicidade composta
+ * ({@code uk_telemetry_device_metric_time}) previne duplicatas decorrentes de retransmissões MQTT.</p>
+ */
 @Entity
 @Table(name = "telemetry_reading", uniqueConstraints = {
         @UniqueConstraint(name = "uk_telemetry_device_metric_time", columnNames = {"device_id", "metric", "recorded_at"})

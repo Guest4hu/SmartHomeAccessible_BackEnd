@@ -12,6 +12,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * Controller responsável pela ingestão de eventos e pelo fluxo acessível de confirmação de alertas visuais.
+ */
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
@@ -35,7 +38,14 @@ public class EventController {
         return ResponseEntity.ok(eventService.getHomeEvents(homeId, requesterId, pendingOnly));
     }
 
-    // Utilizador clica no botão "Já vi" (Acknowledge)
+    /**
+     * Confirma que o morador autenticado visualizou o alerta visual de campainha ou evento.
+     * Atualiza o registro preenchendo a data/hora e o autor do atendimento.
+     *
+     * @param id identificador do evento
+     * @param requesterId identificador do morador autenticado
+     * @return evento atualizado com o status de confirmação
+     */
     @PatchMapping("/events/{id}/acknowledge")
     public ResponseEntity<EventResponse> acknowledgeEvent(
             @PathVariable Long id,

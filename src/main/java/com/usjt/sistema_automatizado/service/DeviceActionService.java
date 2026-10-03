@@ -20,6 +20,12 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
 
+/**
+ * Serviço responsável pela orquestração do despacho de comandos manuais para o hardware (ESP32).
+ *
+ * <p>Implementa o <b>Correlation Pattern</b> para sincronizar o ciclo síncrono HTTP com a mensageria
+ * assíncrona MQTT, protegendo o hardware contra sobrecargas e garantindo rastreabilidade de entrega.</p>
+ */
 @Service
 @RequiredArgsConstructor
 public class DeviceActionService {
@@ -32,9 +38,24 @@ public class DeviceActionService {
     private final CommandAckService commandAckService;
     private final DeviceService deviceService;
 
-    // Não usar @Transactional aqui: o método bloqueia aguardando o ACK do firmware
-    // por até 5 segundos. Manter uma transação JPA aberta durante esse período
-    // seguraria a conexão do pool desnecessariamente.
+    /**
+     * Envia um comando operacional para o microcontrolador via MQTT e bloqueia até receber a confirmação de entrega.
+     *
+     * <p><b>Decisão arquitetural:</b> Este método <i>propositalmente não utiliza {@code @Transactional}</i>.
+     * Como a thread HTTP aguarda síncronamente o ACK do firmware por até 5 segundos via
+     * {@link CommandAckService#aguardarAck(String)}, manter uma transação JPA ativa durante essa espera
+     * prenderia uma conexão do pool HikariCP desnecessariamente, comprometendo a escalabilidade.</p>
+     *
+     * <p><b>Proteção de hardware:</b> Rejeita requisições se o status do dispositivo for {@code OFFLINE},
+     * prevenindo timeouts e o enfileiramento de mensagens em dispositivos desconectados.</p>
+     *
+     * @param deviceId identificador interno do dispositivo alvo
+     * @param request dados do comando a ser executado
+     * @param requesterId identificador do usuário autenticado solicitante
+     * @return resposta estruturada contendo o status final de entrega ({@code DELIVERED}, {@code FAILED} ou {@code TIMEOUT})
+     * @throws jakarta.persistence.EntityNotFoundException se o dispositivo ou usuário solicitante não existirem
+     * @throws IllegalArgumentException se o dispositivo estiver OFFLINE ou se o usuário não pertencer à residência
+     */
     public CommandResponse sendCommand(Long deviceId, CommandRequest request, Long requesterId) {
         // 1. Busca o dispositivo
         Device device = deviceRepository.findById(deviceId)

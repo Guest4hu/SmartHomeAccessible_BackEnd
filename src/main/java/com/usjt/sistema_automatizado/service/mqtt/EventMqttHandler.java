@@ -13,6 +13,19 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+/**
+ * Processador especializado em mensagens recebidas no canal de eventos ({@code devices/{deviceId}/event}).
+ *
+ * <p>Responsabilidades centrais:
+ * <ul>
+ *   <li>Identificar confirmações de comandos ({@code COMMAND_SUCCESS}/{@code COMMAND_FAILED}), extrair o
+ *       {@code correlationId} e resolver o {@link java.util.concurrent.CompletableFuture} síncrono correspondente
+ *       no {@link CommandAckService}.</li>
+ *   <li>Persistir eventos físicos espontâneos (campainha, presença) no histórico do banco de dados.</li>
+ *   <li>Disparar notificações em tempo real via SSE (Server-Sent Events) restritas aos membros da casa do dispositivo.</li>
+ * </ul>
+ * </p>
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

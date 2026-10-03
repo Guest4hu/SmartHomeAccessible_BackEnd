@@ -19,6 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/**
+ * Serviço responsável pelo ciclo de vida das residências e pela gestão de moradores e papéis de acesso.
+ */
 @Service
 @RequiredArgsConstructor
 public class HomeService {
@@ -28,6 +31,14 @@ public class HomeService {
     private final AppUserRepository appUserRepository;
     private final HomeMapper homeMapper;
 
+    /**
+     * Cria uma nova residência e vincula imediatamente o usuário criador como {@link HomeRole#ADMIN}.
+     *
+     * @param request dados da residência (nome)
+     * @param creatorUserId identificador do usuário criador
+     * @return DTO com os dados da casa criada
+     * @throws EntityNotFoundException se o usuário criador não existir
+     */
     @Transactional
     public HomeResponse createHome(HomeRequest request, Long creatorUserId) {
         // 1. Validar se o utilizador que está a criar a casa realmente existe
@@ -79,6 +90,18 @@ public class HomeService {
                 .toList();
     }
 
+    /**
+     * Adiciona um novo usuário como morador (papel FAMILY) a partir do seu endereço de e-mail.
+     *
+     * <p><b>Controle de Acesso:</b> Permitido unicamente ao {@link HomeRole#ADMIN} da casa.</p>
+     *
+     * @param homeId identificador da residência
+     * @param request dados do convite contendo o e-mail do morador
+     * @param requesterId identificador do administrador solicitante
+     * @return DTO com os dados do novo membro registrado
+     * @throws IllegalArgumentException se o solicitante não for ADMIN ou se o usuário já for membro da casa
+     * @throws EntityNotFoundException se o usuário convidado não for encontrado pelo e-mail
+     */
     @Transactional
     public HomeMemberResponse addMember(Long homeId, HomeMemberRequest request, Long requesterId) {
         // 1. Autorização: Verifica se o solicitante é o ADMIN da casa

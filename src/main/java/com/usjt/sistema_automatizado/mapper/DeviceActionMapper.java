@@ -7,6 +7,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+/**
+ * Mapper responsável pela serialização de comandos operacionais despachados pelo backend para o firmware via MQTT.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

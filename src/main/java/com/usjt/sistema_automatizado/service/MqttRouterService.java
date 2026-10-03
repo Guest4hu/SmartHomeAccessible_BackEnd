@@ -9,6 +9,12 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * Roteador central de mensagens MQTT de entrada.
+ *
+ * <p>Implementa o padrão Strategy, delegando a responsabilidade de processamento para implementações
+ * especializadas de {@link MqttMessageHandler} com base na categoria extraída do tópico.</p>
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -16,6 +22,14 @@ public class MqttRouterService {
 
     private final List<MqttMessageHandler> handlers;
 
+    /**
+     * Analisa o tópico e payload do envelope MQTT, aplicando guardas defensivas e delegando ao handler adequado.
+     *
+     * <p>Permite payloads textuais simples (como {@code ONLINE}/{@code OFFLINE}) para mensagens de status LWT,
+     * enquanto exige formatação JSON estrita para telemetria e eventos.</p>
+     *
+     * @param envelope mensagem empacotada com tópico, deviceId e payload
+     */
     public void routeMessage(MqttEnvelope envelope) {
         if (envelope == null || envelope.jsonPayload() == null) {
             log.warn("[Roteador] Envelope ou payload nulo recebido");

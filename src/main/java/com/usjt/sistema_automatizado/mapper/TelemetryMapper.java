@@ -10,9 +10,20 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Mapper responsável pela decomposição de medições agregadas no formato longo de séries temporais.
+ */
 @Component
 public class TelemetryMapper {
 
+    /**
+     * Converte um {@link TelemetryRequest} composto em uma lista de entidades {@link TelemetryReading},
+     * criando uma linha independente para cada grandeza medida (temperatura, umidade, luminosidade).
+     *
+     * @param request payload da leitura ambiental
+     * @param device entidade do dispositivo correspondente
+     * @return lista de leituras individuais prontas para persistência em lote
+     */
     public List<TelemetryReading> toEntityList(TelemetryRequest request, Device device) {
         List<TelemetryReading> readings = new ArrayList<>();
 

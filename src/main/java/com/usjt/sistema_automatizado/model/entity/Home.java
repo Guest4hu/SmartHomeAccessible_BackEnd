@@ -16,6 +16,12 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
+/**
+ * Entidade raiz que delimita a residência e o escopo de segurança multi-tenant do sistema.
+ *
+ * <p>Todos os dispositivos, automações, membros familiares e eventos pertencem a uma residência,
+ * garantindo o isolamento total de dados e regras de negócio entre famílias.</p>
+ */
 @Entity
 @Table(name = "home")
 @Getter

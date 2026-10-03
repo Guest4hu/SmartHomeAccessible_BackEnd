@@ -9,6 +9,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+/**
+ * Processador especializado em mensagens recebidas no canal de telemetria ({@code devices/{deviceId}/telemetry}).
+ *
+ * <p>Converte os dados recebidos dos sensores de ambiente e delega a gravação no formato longo ao {@link TelemetryService}.</p>
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

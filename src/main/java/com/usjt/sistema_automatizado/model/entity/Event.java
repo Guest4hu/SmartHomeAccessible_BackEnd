@@ -9,6 +9,13 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
+/**
+ * Entidade de registro de ocorrências pontuais e disparos assíncronos de sensores (campainha, presença).
+ *
+ * <p>Central para a acessibilidade do sistema: registra alertas visuais da campainha e permite que
+ * moradores confirmem a visualização ({@code acknowledgedAt} e {@code acknowledgedBy}), viabilizando
+ * a filtragem de chamados pendentes e evitando omissões em residências compartilhadas.</p>
+ */
 @Entity
 @Table(
         name = "event",

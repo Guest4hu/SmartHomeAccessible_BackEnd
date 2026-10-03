@@ -1,5 +1,11 @@
 package com.usjt.sistema_automatizado.model.enums;
 
+/**
+ * Catálogo de tipos de eventos registrados pelo sistema.
+ *
+ * <p>Abrange disparos físicos no edge (campainha e presença), transições de conectividade
+ * (LWT de status) e confirmações de entrega bidirecional de comandos/arquivos pelo firmware.</p>
+ */
 public enum EventType
 {
     DOORBELL,
@@ -15,7 +21,13 @@ public enum EventType
     FILE_ERROR,
     UNKNOWN_EVENT;
 
-    // Método utilitário para converter a String que vem do JSON de forma segura
+    /**
+     * Converte de forma resiliente uma representação textual no {@link EventType} correspondente.
+     * Retorna {@link #UNKNOWN_EVENT} para valores nulos, vazios ou não mapeados, evitando quebras de fluxo.
+     *
+     * @param type texto recebido (ex: do payload MQTT ou HTTP)
+     * @return o tipo mapeado ou {@link #UNKNOWN_EVENT}
+     */
     public static EventType fromString(String type) {
         if (type == null || type.isBlank()) {
             return UNKNOWN_EVENT;

@@ -8,6 +8,13 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
+/**
+ * Entidade que encapsula os limiares operacionais e parâmetros de automação de um dispositivo.
+ *
+ * <p>Define a faixa de histerese de temperatura ({@code fanOnAbove} e {@code fanOffBelow}) para
+ * o acionamento do relé de ventilação no IoT Edge, evitando o desgaste prematuro por comutações
+ * repetidas em torno do mesmo valor. As alterações são restritas ao papel {@code ADMIN}.</p>
+ */
 @Entity
 @Table(name = "automation_config")
 @Getter

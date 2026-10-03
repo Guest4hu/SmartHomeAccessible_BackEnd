@@ -19,6 +19,16 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+/**
+ * Serviço de transmissão de notificações em tempo real via Server-Sent Events (SSE).
+ *
+ * <p><b>Isolamento Multi-Tenant:</b> Garante que alertas visuais de campainha e eventos físicos
+ * sejam encaminhados exclusivamente aos moradores cadastrados na residência à qual o dispositivo pertence,
+ * impedindo o vazamento de notificações entre famílias distintas.</p>
+ *
+ * <p><b>Modelo de Concorrência:</b> Utiliza {@link ConcurrentHashMap} associado a {@link CopyOnWriteArrayList}
+ * para suportar com segurança múltiplas conexões/abas simultâneas por usuário com descarte automático de emissores inativos.</p>
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -47,7 +57,13 @@ public class NotificationService {
         }
     }
 
-    // Registra conexão SSE vinculada ao usuário autenticado
+    /**
+     * Registra e inicializa uma conexão persistente SSE vinculada ao usuário autenticado.
+     *
+     * @param userId identificador do usuário conectado
+     * @return emissor SSE configurado com callbacks de ciclo de vida e timeout de 60 minutos
+     * @throws IllegalArgumentException se o identificador de usuário for nulo
+     */
     public SseEmitter subscribe(Long userId) {
         if (userId == null) {
             throw new IllegalArgumentException("Identificador de usuário é obrigatório para conexão SSE.");
@@ -76,12 +92,23 @@ public class NotificationService {
         }
     }
 
-    // Dispara evento com nome padrão ("bell-ring")
+    /**
+     * Dispara um evento utilizando o canal de evento SSE padrão ("bell-ring").
+     *
+     * @param deviceId identificador de hardware (externalId) do dispositivo emissor
+     * @param eventType nome do evento (ex: DOORBELL, PRESENCE_DETECTED)
+     */
     public void dispatchEvent(String deviceId, String eventType) {
         dispatchEvent("bell-ring", deviceId, eventType);
     }
 
-    // Dispara evento descobrindo a residência do dispositivo e notificando apenas seus moradores
+    /**
+     * Resolve a residência do dispositivo e dispara o evento SSE para todos os membros dessa residência.
+     *
+     * @param sseEventName nome do evento SSE recebido pelo cliente EventSource
+     * @param deviceId identificador de hardware do dispositivo
+     * @param eventType tipo de evento a ser propagado
+     */
     public void dispatchEvent(String sseEventName, String deviceId, String eventType) {
         Optional<Long> homeIdOpt = deviceRepository.findHomeIdByExternalId(deviceId);
         if (homeIdOpt.isEmpty()) {
@@ -94,7 +121,13 @@ public class NotificationService {
         dispatchToHome(homeId, sseEventName, payload);
     }
 
-    // Despacha o evento exclusivamente para os membros cadastrados na residência
+    /**
+     * Envia o payload do evento em formato JSON exclusivamente para os emissores SSE dos moradores vinculados à residência.
+     *
+     * @param homeId identificador da residência
+     * @param sseEventName nome do evento SSE
+     * @param payload objeto contendo metadados e instante do evento
+     */
     public void dispatchToHome(Long homeId, String sseEventName, NotificationPayload payload) {
         List<Long> memberUserIds = homeMemberRepository.findUserIdsByHomeId(homeId);
         if (memberUserIds.isEmpty()) {

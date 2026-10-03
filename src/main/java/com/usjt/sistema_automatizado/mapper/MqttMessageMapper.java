@@ -12,13 +12,22 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
+/**
+ * Mapper para conversão de payloads brutos encapsulados em {@link MqttEnvelope} para os respectivos DTOs de domínio.
+ */
 @Component
 @RequiredArgsConstructor
 public class MqttMessageMapper {
 
     private final ObjectMapper objectMapper;
 
-    // Transforma o Envelope de Rede no DTO de Telemetria
+    /**
+     * Desserializa o payload do tópico de telemetria em um {@link TelemetryRequest}.
+     *
+     * @param envelope mensagem MQTT recebida
+     * @return DTO com os valores lidos pelos sensores
+     * @throws Exception em caso de malformação do JSON
+     */
     public TelemetryRequest toTelemetryRequest(MqttEnvelope envelope) throws Exception {
         JsonNode node = objectMapper.readTree(envelope.jsonPayload());
 
@@ -32,7 +41,13 @@ public class MqttMessageMapper {
         );
     }
 
-    // Transforma o Envelope de Evento no DTO de Eventos
+    /**
+     * Desserializa o payload do tópico de eventos em um {@link EventRequest}.
+     *
+     * @param envelope mensagem MQTT recebida
+     * @return DTO com o tipo do evento e metadados de tempo
+     * @throws Exception em caso de malformação do JSON
+     */
     public EventRequest toEventRequest(MqttEnvelope envelope) throws Exception {
         JsonNode node = objectMapper.readTree(envelope.jsonPayload());
 

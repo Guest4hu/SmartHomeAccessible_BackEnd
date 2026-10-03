@@ -15,6 +15,12 @@ import org.springframework.integration.mqtt.support.DefaultPahoMessageConverter;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessageHandler;
 
+/**
+ * Configuração de mensageria IoT via Spring Integration e Eclipse Paho MQTT.
+ *
+ * <p>Estabelece a fábrica de conexões com o broker (com reconexão automática, keep-alive de 60s e timeout defensivo),
+ * configura canais diretos para envio assíncrono e adaptador de escuta inbound com wildcard de dispositivo ({@code devices/+/...}).</p>
+ */
 @Configuration
 public class MqttConfig {
 
