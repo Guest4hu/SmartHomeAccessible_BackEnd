@@ -19,6 +19,9 @@ public class AutomationConfigMapper {
         config.setFanOffBelow(request.fanOffBelow());
         config.setDarkBelow(request.darkBelow());
         config.setDoorbellPattern(request.doorbellPattern());
+        config.setBellR(request.bellR());
+        config.setBellG(request.bellG());
+        config.setBellB(request.bellB());
         config.setUpdatedBy(updatedBy);
 
         return config;
@@ -36,8 +39,29 @@ public class AutomationConfigMapper {
                 entity.getFanOffBelow(),
                 entity.getDarkBelow(),
                 entity.getDoorbellPattern(),
+                entity.getBellR(),
+                entity.getBellG(),
+                entity.getBellB(),
                 entity.getUpdatedAt(),
                 entity.getUpdatedBy().getName()
+        );
+    }
+
+    /**
+     * Serializa a configuração no formato JSON que o firmware ESP32 espera no tópico
+     * {@code devices/{deviceId}/config} (retained, QoS 1).
+     *
+     * @param config entidade salva
+     * @return JSON string para publicação MQTT
+     */
+    public String toMqttConfigPayload(AutomationConfig config) {
+        return String.format(
+                "{\"v\":1,\"fanOnAbove\":%.1f,\"fanOffBelow\":%.1f,\"bellR\":%d,\"bellG\":%d,\"bellB\":%d}",
+                config.getFanOnAbove(),
+                config.getFanOffBelow(),
+                config.getBellR(),
+                config.getBellG(),
+                config.getBellB()
         );
     }
 }

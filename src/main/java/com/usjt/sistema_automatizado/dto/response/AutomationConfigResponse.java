@@ -9,6 +9,9 @@ public record AutomationConfigResponse(
         Double fanOffBelow,
         Double darkBelow,
         String doorbellPattern,
+        Integer bellR,
+        Integer bellG,
+        Integer bellB,
         LocalDateTime updatedAt,
         String updatedByName
 ) {}

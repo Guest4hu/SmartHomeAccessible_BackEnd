@@ -2,6 +2,7 @@ package com.usjt.sistema_automatizado.service;
 
 import com.usjt.sistema_automatizado.dto.request.AutomationConfigRequest;
 import com.usjt.sistema_automatizado.dto.response.AutomationConfigResponse;
+import com.usjt.sistema_automatizado.config.mqtt.MqttGateway;
 import com.usjt.sistema_automatizado.mapper.AutomationConfigMapper;
 import com.usjt.sistema_automatizado.model.entity.AppUser;
 import com.usjt.sistema_automatizado.model.entity.AutomationConfig;
@@ -14,6 +15,7 @@ import com.usjt.sistema_automatizado.repository.DeviceRepository;
 import com.usjt.sistema_automatizado.repository.HomeMemberRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Protege a integridade física dos atuadores (relé do ventilador) garantindo que os limiares de acionamento
  * configurem uma faixa operacional coerente e que apenas administradores da residência alterem parâmetros.</p>
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AutomationConfigService {
@@ -32,6 +35,7 @@ public class AutomationConfigService {
     private final HomeMemberRepository homeMemberRepository;
     private final AppUserRepository appUserRepository;
     private final AutomationConfigMapper automationConfigMapper;
+    private final MqttGateway mqttGateway;
 
     /**
      * Recupera as configurações ativas de automação de um dispositivo.
@@ -101,7 +105,12 @@ public class AutomationConfigService {
 
         AutomationConfig savedConfig = automationConfigRepository.save(configToSave);
 
-        // NOTA: Na Etapa 12, é aqui que enviaremos a nova configuração para o tópico MQTT do ESP32 (Retained message)
+        // Publica a nova configuração no tópico retained do firmware.
+        // O ESP32 recebe imediatamente se online; se offline, receberá na reconexão (retained).
+        String configTopic = "devices/" + device.getExternalId() + "/config";
+        String configPayload = automationConfigMapper.toMqttConfigPayload(savedConfig);
+        mqttGateway.sendToMqtt(configTopic, configPayload);
+        log.info("[Config] Configuracao publicada no topico MQTT {}: {}", configTopic, configPayload);
 
         return automationConfigMapper.toResponse(savedConfig);
     }

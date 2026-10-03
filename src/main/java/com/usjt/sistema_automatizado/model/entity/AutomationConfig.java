@@ -43,6 +43,15 @@ public class AutomationConfig {
     @Column(name = "doorbell_pattern", length = 50)
     private String doorbellPattern;
 
+    @Column(name = "bell_r", nullable = false)
+    private Integer bellR;
+
+    @Column(name = "bell_g", nullable = false)
+    private Integer bellG;
+
+    @Column(name = "bell_b", nullable = false)
+    private Integer bellB;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
