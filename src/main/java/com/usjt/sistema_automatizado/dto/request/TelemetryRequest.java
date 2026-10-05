@@ -3,6 +3,7 @@ package com.usjt.sistema_automatizado.dto.request;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 public record TelemetryRequest(
         @NotNull(message = "A versão do payload é obrigatória")
@@ -17,4 +18,12 @@ public record TelemetryRequest(
         Double temperature,
         Double humidity,
         Double luminosity
-) {}
+) {
+    public TelemetryRequest(String deviceId, Double temperature, Double humidity, Double luminosity) {
+        this(1, deviceId, LocalDateTime.now(ZoneOffset.UTC), temperature, humidity, luminosity);
+    }
+
+    public TelemetryRequest(String deviceId, Double temperature, Double humidity, Integer luminosity) {
+        this(1, deviceId, LocalDateTime.now(ZoneOffset.UTC), temperature, humidity, luminosity != null ? luminosity.doubleValue() : null);
+    }
+}
