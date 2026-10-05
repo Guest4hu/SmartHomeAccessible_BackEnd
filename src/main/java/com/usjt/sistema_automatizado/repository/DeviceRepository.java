@@ -1,12 +1,14 @@
 package com.usjt.sistema_automatizado.repository;
 
 import com.usjt.sistema_automatizado.model.entity.Device;
+import com.usjt.sistema_automatizado.model.enums.DeviceStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,4 +43,14 @@ public interface DeviceRepository extends JpaRepository<Device, Long> {
      */
     @Query("SELECT d.home.id FROM Device d WHERE d.externalId = :externalId")
     Optional<Long> findHomeIdByExternalId(@Param("externalId") String externalId);
+
+    /**
+     * Localiza dispositivos com um status específico cuja última comunicação ocorreu antes do limite temporal fornecido.
+     * Utilizado para detecção de dispositivos desconectados ou silenciosos.
+     *
+     * @param status estado do dispositivo (ex: ONLINE)
+     * @param threshold instante de corte temporal
+     * @return lista de nós inativos
+     */
+    List<Device> findByStatusAndLastSeenAtBefore(DeviceStatus status, LocalDateTime threshold);
 }
