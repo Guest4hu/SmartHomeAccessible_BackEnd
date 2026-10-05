@@ -24,6 +24,9 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,6 +40,12 @@ class DeviceServiceTest {
 
     @Mock
     private DeviceMapper deviceMapper;
+
+    @Mock
+    private NotificationService notificationService;
+
+    @Mock
+    private PushNotificationService pushNotificationService;
 
     @InjectMocks
     private DeviceService deviceService;
@@ -169,6 +178,55 @@ class DeviceServiceTest {
         assertEquals(DeviceStatus.ONLINE, device.getStatus());
         assertNotNull(device.getLastSeenAt());
         verify(deviceRepository, times(1)).save(device);
+        verifyNoInteractions(pushNotificationService);
+    }
+
+    @Test
+    void updateDeviceStatus_DeveDispararPushNotification_QuandoTransitarParaOffline() {
+        String externalId = "esp32-sensor-01";
+        Home home = new Home();
+        home.setId(10L);
+
+        Device device = new Device();
+        device.setId(1L);
+        device.setExternalId(externalId);
+        device.setName("Sensor Portão");
+        device.setHome(home);
+        device.setStatus(DeviceStatus.ONLINE);
+
+        when(deviceRepository.findByExternalId(externalId)).thenReturn(Optional.of(device));
+        when(deviceRepository.save(device)).thenReturn(device);
+
+        deviceService.updateDeviceStatus(externalId, DeviceStatus.OFFLINE);
+
+        assertEquals(DeviceStatus.OFFLINE, device.getStatus());
+        verify(pushNotificationService, times(1)).sendNotificationToHome(
+                eq(10L),
+                eq("Dispositivo Desconectado"),
+                contains("Sensor Portão"),
+                anyMap()
+        );
+    }
+
+    @Test
+    void updateDeviceStatus_NaoDeveDispararPushNotification_QuandoJaEstavaOffline() {
+        String externalId = "esp32-sensor-01";
+        Home home = new Home();
+        home.setId(10L);
+
+        Device device = new Device();
+        device.setId(1L);
+        device.setExternalId(externalId);
+        device.setName("Sensor Portão");
+        device.setHome(home);
+        device.setStatus(DeviceStatus.OFFLINE);
+
+        when(deviceRepository.findByExternalId(externalId)).thenReturn(Optional.of(device));
+        when(deviceRepository.save(device)).thenReturn(device);
+
+        deviceService.updateDeviceStatus(externalId, DeviceStatus.OFFLINE);
+
+        verifyNoInteractions(pushNotificationService);
     }
 
     @Test
@@ -239,5 +297,142 @@ class DeviceServiceTest {
 
         assertEquals("Dispositivo não encontrado com o identificador externo fornecido.", exception.getMessage());
         verify(deviceRepository, never()).save(any());
+    }
+
+    @Test
+    void processHeartbeat_ComRequesterId_DeveLancarExcecao_QuandoNaoPertencerACasa() {
+        // Arrange
+        String deviceId = "esp32-sala-01";
+        Long requesterId = 99L;
+        TelemetryRequest request = new TelemetryRequest(
+                1,
+                deviceId,
+                LocalDateTime.now(),
+                null, null, null
+        );
+
+        Home home = new Home();
+        home.setId(10L);
+
+        Device device = new Device();
+        device.setId(1L);
+        device.setExternalId(deviceId);
+        device.setHome(home);
+
+        when(deviceRepository.findByExternalId(deviceId)).thenReturn(Optional.of(device));
+        when(homeMemberRepository.findByHomeIdAndUserId(10L, requesterId)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> deviceService.processHeartbeat(request, requesterId)
+        );
+
+        assertEquals("Não tem acesso a esta casa.", exception.getMessage());
+        verify(deviceRepository, never()).save(any());
+    }
+
+    @Test
+    void processHeartbeat_ComRequesterId_DeveAtualizarStatus_QuandoPertencerACasa() {
+        // Arrange
+        String deviceId = "esp32-sala-01";
+        Long requesterId = 2L;
+        TelemetryRequest request = new TelemetryRequest(
+                1,
+                deviceId,
+                LocalDateTime.now(),
+                null, null, null
+        );
+
+        Home home = new Home();
+        home.setId(10L);
+
+        Device device = new Device();
+        device.setId(1L);
+        device.setExternalId(deviceId);
+        device.setHome(home);
+        device.setStatus(DeviceStatus.OFFLINE);
+
+        HomeMember member = new HomeMember();
+        DeviceResponse expectedResponse = mock(DeviceResponse.class);
+
+        when(deviceRepository.findByExternalId(deviceId)).thenReturn(Optional.of(device));
+        when(homeMemberRepository.findByHomeIdAndUserId(10L, requesterId)).thenReturn(Optional.of(member));
+        when(deviceRepository.save(device)).thenReturn(device);
+        when(deviceMapper.toResponse(device)).thenReturn(expectedResponse);
+
+        // Act
+        DeviceResponse actualResponse = deviceService.processHeartbeat(request, requesterId);
+
+        // Assert
+        assertEquals(expectedResponse, actualResponse);
+        assertEquals(DeviceStatus.ONLINE, device.getStatus());
+        verify(deviceRepository, times(1)).save(device);
+    }
+
+    @Test
+    void checkStaleDevices_DeveMarcarOfflineENotificar_QuandoDispositivosEstiveremStale() {
+        Device staleDevice = new Device();
+        staleDevice.setId(1L);
+        staleDevice.setExternalId("esp32-stale");
+        staleDevice.setName("Sensor Sala");
+        staleDevice.setStatus(DeviceStatus.ONLINE);
+        staleDevice.setLastSeenAt(LocalDateTime.now().minusMinutes(5));
+
+        when(deviceRepository.findByStatusAndLastSeenAtBefore(eq(DeviceStatus.ONLINE), any(LocalDateTime.class)))
+                .thenReturn(List.of(staleDevice));
+
+        deviceService.checkStaleDevices();
+
+        assertEquals(DeviceStatus.OFFLINE, staleDevice.getStatus());
+        verify(deviceRepository, times(1)).save(staleDevice);
+        verify(notificationService, times(1)).dispatchEvent(
+                eq("device-status"),
+                eq("esp32-stale"),
+                eq("DEVICE_OFFLINE"),
+                any(),
+                any(),
+                anyString(),
+                anyString()
+        );
+    }
+
+    @Test
+    void checkStaleDevices_DeveMarcarOfflineEDispararPushParaResidencia_QuandoDispositivoComCasaStale() {
+        Home home = new Home();
+        home.setId(10L);
+
+        Device staleDevice = new Device();
+        staleDevice.setId(1L);
+        staleDevice.setExternalId("esp32-stale-home");
+        staleDevice.setName("Sensor Garagem");
+        staleDevice.setHome(home);
+        staleDevice.setStatus(DeviceStatus.ONLINE);
+        staleDevice.setLastSeenAt(LocalDateTime.now().minusMinutes(5));
+
+        when(deviceRepository.findByStatusAndLastSeenAtBefore(eq(DeviceStatus.ONLINE), any(LocalDateTime.class)))
+                .thenReturn(List.of(staleDevice));
+
+        deviceService.checkStaleDevices();
+
+        assertEquals(DeviceStatus.OFFLINE, staleDevice.getStatus());
+        verify(pushNotificationService, times(1)).sendNotificationToHome(
+                eq(10L),
+                eq("Dispositivo Desconectado"),
+                contains("Sensor Garagem"),
+                anyMap()
+        );
+    }
+
+    @Test
+    void checkStaleDevices_NaoDeveFazerNada_QuandoNaoHouverDispositivosStale() {
+        when(deviceRepository.findByStatusAndLastSeenAtBefore(eq(DeviceStatus.ONLINE), any(LocalDateTime.class)))
+                .thenReturn(List.of());
+
+        deviceService.checkStaleDevices();
+
+        verify(deviceRepository, never()).save(any());
+        verifyNoInteractions(notificationService);
+        verifyNoInteractions(pushNotificationService);
     }
 }

@@ -8,20 +8,26 @@ import com.usjt.sistema_automatizado.model.entity.Device;
 import com.usjt.sistema_automatizado.model.entity.HomeMember;
 import com.usjt.sistema_automatizado.model.enums.DeviceStatus;
 import com.usjt.sistema_automatizado.model.enums.HomeRole;
+import com.usjt.sistema_automatizado.model.enums.SensoryChannel;
+import com.usjt.sistema_automatizado.model.enums.UrgencyLevel;
 import com.usjt.sistema_automatizado.repository.DeviceRepository;
 import com.usjt.sistema_automatizado.repository.HomeMemberRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Serviço responsável pelo cadastro, inventário e gestão de conectividade dos dispositivos IoT da residência.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DeviceService {
@@ -29,6 +35,8 @@ public class DeviceService {
     private final DeviceRepository deviceRepository;
     private final HomeMemberRepository homeMemberRepository;
     private final DeviceMapper deviceMapper;
+    private final NotificationService notificationService;
+    private final PushNotificationService pushNotificationService;
 
     /**
      * Registra um novo dispositivo IoT vinculando o externalId de hardware à residência especificada.
@@ -99,27 +107,110 @@ public class DeviceService {
     public void updateDeviceStatus(String externalId, DeviceStatus status) {
         Device device = deviceRepository.findByExternalId(externalId)
                 .orElseThrow(() -> new EntityNotFoundException("Dispositivo não encontrado: " + externalId));
+
+        DeviceStatus previousStatus = device.getStatus();
         device.setStatus(status);
         device.setLastSeenAt(LocalDateTime.now(ZoneOffset.UTC));
         deviceRepository.save(device);
+
+        // Se o dispositivo transitou para OFFLINE, dispara push notification para a residência
+        if (status == DeviceStatus.OFFLINE && previousStatus != DeviceStatus.OFFLINE) {
+            Long homeId = (device.getHome() != null) ? device.getHome().getId() : null;
+            if (homeId == null) {
+                homeId = deviceRepository.findHomeIdByExternalId(externalId).orElse(null);
+            }
+
+            if (homeId != null) {
+                String title = "Dispositivo Desconectado";
+                String body = "O dispositivo " + device.getName() + " parou de se comunicar.";
+                Map<String, String> data = Map.of(
+                        "eventType", "DEVICE_OFFLINE",
+                        "deviceId", externalId,
+                        "deviceName", device.getName(),
+                        "urgency", "WARNING"
+                );
+                pushNotificationService.sendNotificationToHome(homeId, title, body, data);
+            }
+        }
     }
 
     /**
-     * Processa o sinal de atividade (heartbeat) de um dispositivo comutando seu status para ONLINE.
+     * Processa o sinal de atividade (heartbeat) de um dispositivo comutando seu status para ONLINE,
+     * validando que o solicitante pertence à residência vinculada.
      *
      * @param request dados do heartbeat contendo o externalId
+     * @param requesterId identificador do usuário solicitante
      * @return DTO com o dispositivo atualizado
-     * @throws IllegalArgumentException se o dispositivo não for encontrado
+     * @throws IllegalArgumentException se o dispositivo não for encontrado ou se o usuário não pertencer à residência
      */
     @Transactional
-    public DeviceResponse processHeartbeat(TelemetryRequest request) {
+    public DeviceResponse processHeartbeat(TelemetryRequest request, Long requesterId) {
         Device device = deviceRepository.findByExternalId(request.deviceId())
                 .orElseThrow(() -> new IllegalArgumentException("Dispositivo não encontrado com o identificador externo fornecido."));
+
+        if (requesterId != null && device.getHome() != null) {
+            homeMemberRepository.findByHomeIdAndUserId(device.getHome().getId(), requesterId)
+                    .orElseThrow(() -> new IllegalArgumentException("Não tem acesso a esta casa."));
+        }
 
         device.setStatus(DeviceStatus.ONLINE);
         device.setLastSeenAt(LocalDateTime.now(ZoneOffset.UTC));
         Device updatedDevice = deviceRepository.save(device);
 
         return deviceMapper.toResponse(updatedDevice);
+    }
+
+    /**
+     * Sobrecarga para processamento de heartbeat sem validação de usuário (compatibilidade).
+     */
+    @Transactional
+    public DeviceResponse processHeartbeat(TelemetryRequest request) {
+        return processHeartbeat(request, null);
+    }
+
+    /**
+     * Monitora periodicamente nós IoT marcados como ONLINE cuja última atividade (lastSeenAt)
+     * é anterior a 3 minutos. Comuta para OFFLINE e notifica os moradores via SSE.
+     */
+    @Scheduled(fixedRate = 60000)
+    @Transactional
+    public void checkStaleDevices() {
+        LocalDateTime threshold = LocalDateTime.now(ZoneOffset.UTC).minusMinutes(3);
+        List<Device> staleDevices = deviceRepository.findByStatusAndLastSeenAtBefore(DeviceStatus.ONLINE, threshold);
+
+        for (Device device : staleDevices) {
+            log.warn("[Heartbeat Monitor] Dispositivo {} ({}) sem comunicacao recente (lastSeenAt={}). Marcando como OFFLINE.",
+                    device.getName(), device.getExternalId(), device.getLastSeenAt());
+            device.setStatus(DeviceStatus.OFFLINE);
+            deviceRepository.save(device);
+
+            notificationService.dispatchEvent(
+                    "device-status",
+                    device.getExternalId(),
+                    "DEVICE_OFFLINE",
+                    UrgencyLevel.WARNING,
+                    SensoryChannel.MULTIMODAL,
+                    "Dispositivo " + device.getName() + " sem sinal de comunicacao.",
+                    "Atenção: o dispositivo " + device.getName() + " parou de se comunicar."
+            );
+
+            // Dispara Push Notification para a residência do nó stale
+            Long homeId = (device.getHome() != null) ? device.getHome().getId() : null;
+            if (homeId == null) {
+                homeId = deviceRepository.findHomeIdByExternalId(device.getExternalId()).orElse(null);
+            }
+
+            if (homeId != null) {
+                String title = "Dispositivo Desconectado";
+                String body = "O dispositivo " + device.getName() + " parou de se comunicar.";
+                Map<String, String> data = Map.of(
+                        "eventType", "DEVICE_OFFLINE",
+                        "deviceId", device.getExternalId(),
+                        "deviceName", device.getName(),
+                        "urgency", "WARNING"
+                );
+                pushNotificationService.sendNotificationToHome(homeId, title, body, data);
+            }
+        }
     }
 }
