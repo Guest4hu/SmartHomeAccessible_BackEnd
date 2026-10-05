@@ -6,12 +6,17 @@ import com.usjt.sistema_automatizado.mapper.MqttMessageMapper;
 import com.usjt.sistema_automatizado.model.enums.CommandDeliveryStatus;
 import com.usjt.sistema_automatizado.model.enums.EventType;
 import com.usjt.sistema_automatizado.model.enums.MqttMessageType;
+import com.usjt.sistema_automatizado.repository.DeviceRepository;
 import com.usjt.sistema_automatizado.service.CommandAckService;
 import com.usjt.sistema_automatizado.service.EventService;
 import com.usjt.sistema_automatizado.service.NotificationService;
+import com.usjt.sistema_automatizado.service.PushNotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * Processador especializado em mensagens recebidas no canal de eventos ({@code devices/{deviceId}/event}).
@@ -23,6 +28,7 @@ import org.springframework.stereotype.Component;
  *       no {@link CommandAckService}.</li>
  *   <li>Persistir eventos físicos espontâneos (campainha, presença) no histórico do banco de dados.</li>
  *   <li>Disparar notificações em tempo real via SSE (Server-Sent Events) restritas aos membros da casa do dispositivo.</li>
+ *   <li>Despachar push notifications móveis via {@link PushNotificationService} em acionamentos de campainha (DOORBELL).</li>
  * </ul>
  * </p>
  */
@@ -35,6 +41,8 @@ public class EventMqttHandler implements MqttMessageHandler {
     private final NotificationService notificationService;
     private final MqttMessageMapper mqttMapper;
     private final CommandAckService commandAckService;
+    private final DeviceRepository deviceRepository;
+    private final PushNotificationService pushNotificationService;
 
     @Override
     public boolean supports(MqttMessageType messageType) {
@@ -54,7 +62,7 @@ public class EventMqttHandler implements MqttMessageHandler {
             CommandDeliveryStatus ackStatus = (request.type() == EventType.COMMAND_SUCCESS)
                     ? CommandDeliveryStatus.DELIVERED
                     : CommandDeliveryStatus.FAILED;
-            commandAckService.resolverAck(correlationId, ackStatus);
+            commandAckService.resolverAck(envelope.deviceId(), correlationId, ackStatus);
         }
 
         // Persiste o evento normalmente (histórico no banco)
@@ -67,5 +75,23 @@ public class EventMqttHandler implements MqttMessageHandler {
         // Dispara SSE para o painel web (item 2 da Seção 5 do CONTEXTO.md)
         notificationService.dispatchEvent(envelope.deviceId(), request.type().name());
         log.info("[Roteador] Evento disparado -> Device: {}, Tipo: {}", envelope.deviceId(), request.type());
+
+        // Dispara Push Notification móvel para eventos de campainha (DOORBELL)
+        if (request.type() == EventType.DOORBELL) {
+            Optional<Long> homeIdOpt = deviceRepository.findHomeIdByExternalId(envelope.deviceId());
+            if (homeIdOpt.isPresent()) {
+                Long homeId = homeIdOpt.get();
+                String title = "Campainha Acionada";
+                String body = "A campainha foi acionada pelo dispositivo " + envelope.deviceId() + ".";
+                Map<String, String> data = Map.of(
+                        "eventType", "DOORBELL",
+                        "deviceId", envelope.deviceId(),
+                        "urgency", "WARNING"
+                );
+                pushNotificationService.sendNotificationToHome(homeId, title, body, data);
+            } else {
+                log.warn("[EventMqttHandler] Dispositivo {} não vinculado a residência; push notification de campainha ignorada.", envelope.deviceId());
+            }
+        }
     }
 }

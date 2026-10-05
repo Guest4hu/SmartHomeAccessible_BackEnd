@@ -6,9 +6,11 @@ import com.usjt.sistema_automatizado.mapper.MqttMessageMapper;
 import com.usjt.sistema_automatizado.model.enums.CommandDeliveryStatus;
 import com.usjt.sistema_automatizado.model.enums.EventType;
 import com.usjt.sistema_automatizado.model.enums.MqttMessageType;
+import com.usjt.sistema_automatizado.repository.DeviceRepository;
 import com.usjt.sistema_automatizado.service.CommandAckService;
 import com.usjt.sistema_automatizado.service.EventService;
 import com.usjt.sistema_automatizado.service.NotificationService;
+import com.usjt.sistema_automatizado.service.PushNotificationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,8 +18,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,6 +43,12 @@ class EventMqttHandlerTest {
     @Mock
     private CommandAckService commandAckService;
 
+    @Mock
+    private DeviceRepository deviceRepository;
+
+    @Mock
+    private PushNotificationService pushNotificationService;
+
     @InjectMocks
     private EventMqttHandler handler;
 
@@ -48,12 +62,13 @@ class EventMqttHandlerTest {
     }
 
     @Test
-    void handle_DeveProcessarEventoFisico_SemResolverAck() throws Exception {
+    void handle_DeveProcessarEventoFisico_SemResolverAck_EDispararPushQuandoDoorbell() throws Exception {
         // Arrange
         MqttEnvelope envelope = new MqttEnvelope("devices/esp32-01/event", "esp32-01", "{\"type\":\"DOORBELL\"}");
         EventRequest request = new EventRequest(1, "esp32-01", LocalDateTime.now(), EventType.DOORBELL);
 
         when(mqttMapper.toEventRequest(envelope)).thenReturn(request);
+        when(deviceRepository.findHomeIdByExternalId("esp32-01")).thenReturn(Optional.of(10L));
 
         // Act
         handler.handle(envelope);
@@ -63,6 +78,26 @@ class EventMqttHandlerTest {
         verify(commandAckService, never()).resolverAck(anyString(), anyString());
         verify(eventService, times(1)).createEvent(request);
         verify(notificationService, times(1)).dispatchEvent("esp32-01", "DOORBELL");
+        verify(pushNotificationService, times(1)).sendNotificationToHome(
+                eq(10L),
+                eq("Campainha Acionada"),
+                contains("esp32-01"),
+                anyMap()
+        );
+    }
+
+    @Test
+    void handle_NaoDeveDispararPushNotification_QuandoEventoNaoForDoorbell() throws Exception {
+        MqttEnvelope envelope = new MqttEnvelope("devices/esp32-01/event", "esp32-01", "{\"type\":\"PRESENCE_DETECTED\"}");
+        EventRequest request = new EventRequest(1, "esp32-01", LocalDateTime.now(), EventType.PRESENCE_DETECTED);
+
+        when(mqttMapper.toEventRequest(envelope)).thenReturn(request);
+
+        handler.handle(envelope);
+
+        verify(eventService, times(1)).createEvent(request);
+        verify(notificationService, times(1)).dispatchEvent("esp32-01", "PRESENCE_DETECTED");
+        verifyNoInteractions(pushNotificationService);
     }
 
     @Test
@@ -78,9 +113,10 @@ class EventMqttHandlerTest {
         handler.handle(envelope);
 
         // Assert
-        verify(commandAckService, times(1)).resolverAck("uuid-123", CommandDeliveryStatus.DELIVERED);
+        verify(commandAckService, times(1)).resolverAck("esp32-01", "uuid-123", CommandDeliveryStatus.DELIVERED);
         verify(eventService, times(1)).createEvent(request);
         verify(notificationService, times(1)).dispatchEvent("esp32-01", "COMMAND_SUCCESS");
+        verifyNoInteractions(pushNotificationService);
     }
 
     @Test
@@ -96,9 +132,10 @@ class EventMqttHandlerTest {
         handler.handle(envelope);
 
         // Assert
-        verify(commandAckService, times(1)).resolverAck("uuid-456", CommandDeliveryStatus.FAILED);
+        verify(commandAckService, times(1)).resolverAck("esp32-01", "uuid-456", CommandDeliveryStatus.FAILED);
         verify(eventService, times(1)).createEvent(request);
         verify(notificationService, times(1)).dispatchEvent("esp32-01", "COMMAND_FAILED");
+        verifyNoInteractions(pushNotificationService);
     }
 
     @Test
@@ -113,5 +150,6 @@ class EventMqttHandlerTest {
         verify(commandAckService, never()).resolverAck(anyString(), anyString());
         verify(eventService, never()).createEvent(any());
         verify(notificationService, never()).dispatchEvent(anyString(), anyString());
+        verifyNoInteractions(pushNotificationService);
     }
 }
