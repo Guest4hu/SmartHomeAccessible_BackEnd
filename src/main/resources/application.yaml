@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/smarthome
+    username: smarthome
+    password: smarthome
+  jpa:
+    hibernate:
+      ddl-auto: validate   # quem cria as tabelas é o Flyway, não o Hibernate
+  flyway:
+    enabled: true
+api:
+  security:
+    token:
+      secret: ${JWT_SECRET:umSegredoMuitoLongoParaOsTestesRodaremSemReclamarem123!}
+      expiration: ${JWT_EXPIRATION:86400000}
+mqtt:
+  broker:
+    url: tcp://broker.emqx.io:1883
+  client:
+    id: ${CLIENT_ID:backend-smart-home-tx}
+app:
+  firebase:
+    enabled: ${FIREBASE_ENABLED:false}
+    dry-run: ${FIREBASE_DRY_RUN:true}
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
