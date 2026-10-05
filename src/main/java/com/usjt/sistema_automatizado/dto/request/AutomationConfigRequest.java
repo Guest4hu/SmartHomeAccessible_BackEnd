@@ -32,4 +32,8 @@ public record AutomationConfigRequest(
         @Min(value = 0, message = "O valor B deve ser entre 0 e 255")
         @Max(value = 255, message = "O valor B deve ser entre 0 e 255")
         Integer bellB
-) {}
+) {
+    public AutomationConfigRequest(Double fanOnAbove, Double fanOffBelow, Double darkBelow, String doorbellPattern) {
+        this(fanOnAbove, fanOffBelow, darkBelow, doorbellPattern, 255, 0, 0);
+    }
+}
