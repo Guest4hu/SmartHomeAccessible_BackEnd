@@ -41,6 +41,10 @@ CYGWIN* | MINGW*)
   ;;
 esac
 
+if [ -z "${JAVA_HOME-}" ] && [ -d "/home/guest4hu/.jdks/temurin-25.0.4.1" ]; then
+  export JAVA_HOME="/home/guest4hu/.jdks/temurin-25.0.4.1"
+fi
+
 # set JAVACMD and JAVACCMD
 set_java_home() {
   # For Cygwin and MinGW, ensure paths are in Unix format before anything is touched
