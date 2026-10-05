@@ -62,6 +62,8 @@ public class MqttConfig {
         MqttPahoMessageHandler messageHandler = new MqttPahoMessageHandler(clientId, mqttClientFactory());
         messageHandler.setAsync(true);
         messageHandler.setDefaultTopic("default/topic");
+        messageHandler.setDefaultQos(1);
+        messageHandler.setDefaultRetained(false);
         return messageHandler;
     }
     @Bean

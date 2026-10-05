@@ -28,10 +28,10 @@ public class MqttService {
      * @param jsonPayload payload formatado contendo a ação e o correlationId
      */
     public void sendCommand(String externalId, String jsonPayload) {
-        // Monta o tópico no formato correto: devices/{externalId}/cmd
+        // Monta o tópico no formato correto: devices/{externalId}/cmd com QoS 1 e retained false
         String topic = "devices/" + externalId + "/" + MqttMessageType.COMMAND.getSuffix();
         log.info("[MQTT] A enviar comando para {}: {}", topic, jsonPayload);
-        mqttGateway.sendToMqtt(topic, jsonPayload);
+        mqttGateway.sendToMqtt(topic, 1, false, jsonPayload);
     }
 
     /**

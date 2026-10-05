@@ -17,4 +17,17 @@ public interface MqttGateway {
      * @param payload conteúdo textual ou JSON serializado
      */
     void sendToMqtt(@Header(MqttHeaders.TOPIC) String topic, String payload);
+
+    /**
+     * Publica uma mensagem no tópico MQTT com QoS e Retain explicitamente definidos.
+     *
+     * @param topic tópico MQTT de destino
+     * @param qos nível de qualidade de serviço (0 ou 1)
+     * @param retained se a mensagem deve ser retida pelo broker MQTT
+     * @param payload conteúdo textual ou JSON serializado
+     */
+    void sendToMqtt(@Header(MqttHeaders.TOPIC) String topic,
+                    @Header(MqttHeaders.QOS) int qos,
+                    @Header(MqttHeaders.RETAINED) boolean retained,
+                    String payload);
 }
