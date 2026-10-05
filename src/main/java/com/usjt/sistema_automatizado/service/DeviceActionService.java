@@ -8,6 +8,7 @@ import com.usjt.sistema_automatizado.mapper.DeviceActionMapper;
 import com.usjt.sistema_automatizado.model.entity.AppUser;
 import com.usjt.sistema_automatizado.model.entity.Device;
 import com.usjt.sistema_automatizado.model.enums.CommandDeliveryStatus;
+import com.usjt.sistema_automatizado.model.enums.CommandType;
 import com.usjt.sistema_automatizado.model.enums.DeviceStatus;
 import com.usjt.sistema_automatizado.repository.AppUserRepository;
 import com.usjt.sistema_automatizado.repository.DeviceRepository;
@@ -61,36 +62,42 @@ public class DeviceActionService {
         Device device = deviceRepository.findById(deviceId)
                 .orElseThrow(() -> new EntityNotFoundException("Dispositivo não encontrado."));
 
-        // 2. Proteção de Hardware: Bloqueia comandos se o ESP32 estiver offline
+        // 2. Segurança: Garante primeiro que o utilizador pertence à casa antes de revelar status
+        homeMemberRepository.findByHomeIdAndUserId(device.getHome().getId(), requesterId)
+                .orElseThrow(() -> new IllegalArgumentException("Não tem acesso aos dispositivos desta casa."));
+
+        // 3. Validação do Comando: Rejeita comandos não suportados pelo firmware
+        if (request.type() == CommandType.SET_VALUE) {
+            throw new IllegalArgumentException("Tipo de comando 'SET_VALUE' não suportado.");
+        }
+
+        // 4. Proteção de Hardware: Bloqueia comandos se o ESP32 estiver offline
         if (device.getStatus() == DeviceStatus.OFFLINE) {
             throw new IllegalArgumentException(
                     "Não é possível enviar o comando. O dispositivo '" + device.getName() + "' está OFFLINE, Ative o No Aplicativo."
             );
         }
 
-        // 3. Segurança: Garante que o utilizador pertence à casa
-        homeMemberRepository.findByHomeIdAndUserId(device.getHome().getId(), requesterId)
-                .orElseThrow(() -> new IllegalArgumentException("Não tem acesso aos dispositivos desta casa."));
-
         AppUser requester = appUserRepository.findById(requesterId)
                 .orElseThrow(() -> new EntityNotFoundException("Utilizador não encontrado."));
 
-        // 4. Gera um UUID único para esta requisição (correlationId).
-        //    O firmware ecoa este ID na confirmação, permitindo ao backend
-        //    identificar exatamente qual Future deve ser resolvido,
-        //    sem interferência de eventos físicos (DOORBELL, PRESENCE, etc.).
+        // 5. Gera um UUID único para esta requisição (correlationId).
         String correlationId = UUID.randomUUID().toString();
 
-        // 5. Converte o request para JSON com o correlationId embutido
+        // 6. Registra preventivamente no CommandAckService ANTES do envio MQTT
+        //    para eliminar race conditions com respostas instantâneas
+        commandAckService.registrarEspera(correlationId, device.getExternalId());
+
+        // 7. Converte o request para JSON com o correlationId embutido
         String jsonPayload = commandMapper.toCommandJson(request, correlationId);
 
-        // 6. Publica o comando no MQTT
+        // 8. Publica o comando no MQTT
         mqttService.sendCommand(device.getExternalId(), jsonPayload);
 
-        // 7. Aguarda a confirmação do firmware pelo correlationId específico (até 5s)
+        // 9. Aguarda a confirmação do firmware pelo correlationId específico (até 5s)
         CommandDeliveryStatus ackStatus = commandAckService.aguardarAck(correlationId);
 
-        // 8. Retorna a resposta com o status real de entrega ao dispositivo
+        // 10. Retorna a resposta com o status real de entrega ao dispositivo
         return new CommandResponse(
                 device.getExternalId(),
                 request.type(),
@@ -98,6 +105,13 @@ public class DeviceActionService {
                 LocalDateTime.now(ZoneOffset.UTC),
                 requester.getName()
         );
+    }
+
+    /**
+     * Atualiza o status do dispositivo com validação de morador da residência.
+     */
+    public DeviceResponse processHeartbeat(TelemetryRequest request, Long requesterId) {
+        return deviceService.processHeartbeat(request, requesterId);
     }
 
     /**

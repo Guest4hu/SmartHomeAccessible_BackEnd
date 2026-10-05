@@ -99,12 +99,19 @@ public class DeviceActionServicteTest {
         Long requesterId = 1L;
         CommandRequest request = new CommandRequest(CommandType.TURN_ON);
 
+        Home home = new Home();
+        home.setId(10L);
+
         Device device = new Device();
         device.setId(deviceId);
         device.setName("Lâmpada Sala");
         device.setStatus(DeviceStatus.OFFLINE);
+        device.setHome(home);
+
+        HomeMember member = new HomeMember();
 
         when(deviceRepository.findById(deviceId)).thenReturn(Optional.of(device));
+        when(homeMemberRepository.findByHomeIdAndUserId(10L, requesterId)).thenReturn(Optional.of(member));
 
         // Act & Assert
         IllegalArgumentException exception = assertThrows(
@@ -113,6 +120,35 @@ public class DeviceActionServicteTest {
         );
 
         assertTrue(exception.getMessage().contains("OFFLINE"));
+        verify(mqttService, never()).sendCommand(anyString(), anyString());
+    }
+
+    @Test
+    void sendCommand_DeveLancarExcecao_QuandoComandoNaoSuportado() {
+        // Arrange
+        Long deviceId = 1L;
+        Long requesterId = 1L;
+        CommandRequest request = new CommandRequest(CommandType.SET_VALUE);
+
+        Home home = new Home();
+        home.setId(10L);
+
+        Device device = new Device();
+        device.setId(deviceId);
+        device.setHome(home);
+
+        HomeMember member = new HomeMember();
+
+        when(deviceRepository.findById(deviceId)).thenReturn(Optional.of(device));
+        when(homeMemberRepository.findByHomeIdAndUserId(10L, requesterId)).thenReturn(Optional.of(member));
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> deviceActionService.sendCommand(deviceId, request, requesterId)
+        );
+
+        assertTrue(exception.getMessage().contains("SET_VALUE"));
         verify(mqttService, never()).sendCommand(anyString(), anyString());
     }
 
@@ -217,7 +253,31 @@ public class DeviceActionServicteTest {
         assertEquals("Alice", response.requestedBy());
         assertNotNull(response.dispatchedAt());
 
+        verify(commandAckService, times(1)).registrarEspera(anyString(), eq("esp32-sala-01"));
         verify(mqttService, times(1)).sendCommand(eq("esp32-sala-01"), eq("{\"action\":\"FAN_ON\"}"));
         verify(commandAckService, times(1)).aguardarAck(anyString());
+    }
+
+    @Test
+    void processHeartbeat_ComRequesterId_DeveDelegarParaDeviceService() {
+        // Arrange
+        TelemetryRequest request = new TelemetryRequest(
+                1,
+                "esp32-dht11-01",
+                LocalDateTime.now(),
+                25.5,
+                60.0,
+                450.0
+        );
+        Long requesterId = 5L;
+        DeviceResponse expectedResponse = mock(DeviceResponse.class);
+        when(deviceService.processHeartbeat(request, requesterId)).thenReturn(expectedResponse);
+
+        // Act
+        DeviceResponse actualResponse = deviceActionService.processHeartbeat(request, requesterId);
+
+        // Assert
+        assertSame(expectedResponse, actualResponse);
+        verify(deviceService, times(1)).processHeartbeat(request, requesterId);
     }
 }
