@@ -6,11 +6,15 @@ import com.usjt.sistema_automatizado.dto.response.MetricSeriesResponse;
 import com.usjt.sistema_automatizado.mapper.TelemetryMapper;
 import com.usjt.sistema_automatizado.model.entity.Device;
 import com.usjt.sistema_automatizado.model.entity.TelemetryReading;
+import com.usjt.sistema_automatizado.model.enums.DeviceStatus;
 import com.usjt.sistema_automatizado.model.enums.MetricType;
+import com.usjt.sistema_automatizado.model.enums.SensoryChannel;
+import com.usjt.sistema_automatizado.model.enums.UrgencyLevel;
 import com.usjt.sistema_automatizado.repository.DeviceRepository;
 import com.usjt.sistema_automatizado.repository.TelemetryReadingRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +35,7 @@ import java.util.stream.Collectors;
  * <p>Responsável pela conversão do modelo de transporte para o formato longo relacional e pelo cálculo
  * analítico de séries temporais com resolução dinâmica de intervalo (RAW, HOUR, DAY).</p>
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TelemetryService {
@@ -38,9 +43,12 @@ public class TelemetryService {
     private final TelemetryReadingRepository telemetryRepository;
     private final DeviceRepository deviceRepository; // Usado diretamente aqui para simplificar a busca
     private final TelemetryMapper telemetryMapper;
+    private final NotificationService notificationService;
+    private final PushNotificationService pushNotificationService;
 
     /**
-     * Persiste em lote leituras de sensores ambientais convertidas para o formato longo.
+     * Persiste em lote leituras de sensores ambientais convertidas para o formato longo,
+     * atualiza o instante de última atividade do hardware e valida anomalias ambientais.
      *
      * @param request payload de telemetria contendo medições simultâneas
      * @throws EntityNotFoundException se o dispositivo não for encontrado pelo externalId
@@ -50,10 +58,71 @@ public class TelemetryService {
         Device device = deviceRepository.findByExternalId(request.deviceId())
                 .orElseThrow(() -> new EntityNotFoundException("Dispositivo não encontrado: " + request.deviceId()));
 
+        device.setLastSeenAt(LocalDateTime.now(ZoneOffset.UTC));
+        if (device.getStatus() != DeviceStatus.ONLINE) {
+            device.setStatus(DeviceStatus.ONLINE);
+        }
+        deviceRepository.save(device);
+
         List<TelemetryReading> readings = telemetryMapper.toEntityList(request, device);
 
         if (!readings.isEmpty()) {
             telemetryRepository.saveAll(readings);
+        }
+
+        verificarLimitesAmbientais(request);
+    }
+
+    private void verificarLimitesAmbientais(TelemetryRequest request) {
+        if (request.temperature() == null) return;
+
+        double temp = request.temperature();
+        if (temp >= 45.0) {
+            log.warn("[Alerta Ambiental] Temperatura crítica ({}) detectada no dispositivo {}", temp, request.deviceId());
+            notificationService.dispatchEvent(
+                    "sensor-alert",
+                    request.deviceId(),
+                    "CRITICAL_TEMPERATURE",
+                    UrgencyLevel.CRITICAL,
+                    SensoryChannel.MULTIMODAL,
+                    "Alerta crítico: temperatura perigosamente alta (" + temp + " °C) detectada no dispositivo " + request.deviceId(),
+                    "Atenção: temperatura muito alta detectada no ambiente."
+            );
+
+            deviceRepository.findHomeIdByExternalId(request.deviceId()).ifPresent(homeId -> {
+                String title = "Alerta Crítico: Temperatura Alta";
+                String body = "Temperatura perigosamente alta (" + temp + " °C) detectada no dispositivo " + request.deviceId() + ".";
+                Map<String, String> data = Map.of(
+                        "eventType", "CRITICAL_TEMPERATURE",
+                        "deviceId", request.deviceId(),
+                        "temperature", String.valueOf(temp),
+                        "urgency", "CRITICAL"
+                );
+                pushNotificationService.sendNotificationToHome(homeId, title, body, data);
+            });
+        } else if (temp <= 0.0) {
+            log.warn("[Alerta Ambiental] Risco de congelamento ({}) detectado no dispositivo {}", temp, request.deviceId());
+            notificationService.dispatchEvent(
+                    "sensor-alert",
+                    request.deviceId(),
+                    "FREEZE_WARNING",
+                    UrgencyLevel.WARNING,
+                    SensoryChannel.MULTIMODAL,
+                    "Alerta: temperatura próxima a 0 °C detectada no dispositivo " + request.deviceId(),
+                    "Atenção: temperatura muito baixa detectada no ambiente."
+            );
+
+            deviceRepository.findHomeIdByExternalId(request.deviceId()).ifPresent(homeId -> {
+                String title = "Alerta: Risco de Congelamento";
+                String body = "Temperatura próxima a 0 °C (" + temp + " °C) detectada no dispositivo " + request.deviceId() + ".";
+                Map<String, String> data = Map.of(
+                        "eventType", "FREEZE_WARNING",
+                        "deviceId", request.deviceId(),
+                        "temperature", String.valueOf(temp),
+                        "urgency", "WARNING"
+                );
+                pushNotificationService.sendNotificationToHome(homeId, title, body, data);
+            });
         }
     }
 
