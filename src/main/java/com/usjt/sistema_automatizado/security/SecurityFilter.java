@@ -52,7 +52,8 @@ public class SecurityFilter extends OncePerRequestFilter {
             return authHeader.replace("Bearer ", "");
         }
         String tokenParam = request.getParameter("token");
-        if (tokenParam != null && !tokenParam.isBlank()) {
+        // O suporte a query param é exclusivo para EventSource SSE (que não permite headers customizados)
+        if (tokenParam != null && !tokenParam.isBlank() && "/api/v1/notifications/stream".equals(request.getRequestURI())) {
             return tokenParam;
         }
         return null;
