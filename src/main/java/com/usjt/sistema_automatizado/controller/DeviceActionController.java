@@ -29,8 +29,11 @@ public class DeviceActionController {
      * @return resposta HTTP com o estado atualizado do dispositivo
      */
     @PostMapping("/active")
-    public ResponseEntity<DeviceResponse> receiveHeartbeat(@RequestBody @Valid TelemetryRequest request) {
-        DeviceResponse response = deviceActionService.processHeartbeat(request);
+    public ResponseEntity<DeviceResponse> receiveHeartbeat(
+            @RequestBody @Valid TelemetryRequest request,
+            @AuthenticationPrincipal Long requesterId
+    ) {
+        DeviceResponse response = deviceActionService.processHeartbeat(request, requesterId);
         return ResponseEntity.ok(response);
     }
 
