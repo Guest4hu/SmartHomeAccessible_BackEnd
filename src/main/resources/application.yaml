@@ -18,3 +18,8 @@ mqtt:
     url: tcp://broker.emqx.io:1883
   client:
     id: ${CLIENT_ID:backend-smart-home-tx}
+app:
+  firebase:
+    enabled: ${FIREBASE_ENABLED:false}
+    dry-run: ${FIREBASE_DRY_RUN:true}
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
