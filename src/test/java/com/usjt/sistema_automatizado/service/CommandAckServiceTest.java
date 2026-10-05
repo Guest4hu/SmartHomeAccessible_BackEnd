@@ -103,4 +103,37 @@ class CommandAckServiceTest {
         assertDoesNotThrow(() -> commandAckService.resolverAck("corr-inexistente", CommandDeliveryStatus.DELIVERED));
         assertEquals(0, commandAckService.getPendingAcksCount());
     }
+
+    @Test
+    void registrarEspera_DevePermitirResolverAckAntesDeAguardarAck() {
+        String correlationId = "corr-pre-registered";
+
+        // 1. Registra antes do publish
+        commandAckService.registrarEspera(correlationId, "esp32-01");
+        assertEquals(1, commandAckService.getPendingAcksCount());
+
+        // 2. Dispositivo responde instantaneamente
+        commandAckService.resolverAck("esp32-01", correlationId, CommandDeliveryStatus.DELIVERED);
+
+        // 3. Thread chama aguardarAck e recebe imediatamente DELIVERED sem esperar timeout
+        CommandDeliveryStatus status = commandAckService.aguardarAck(correlationId);
+        assertEquals(CommandDeliveryStatus.DELIVERED, status);
+        assertEquals(0, commandAckService.getPendingAcksCount());
+    }
+
+    @Test
+    void resolverAck_DeveRejeitarQuandoDispositivoNaoConfereComVinculado() {
+        CommandAckService shortTimeoutService = new CommandAckService(80);
+        String correlationId = "corr-device-mismatch";
+
+        shortTimeoutService.registrarEspera(correlationId, "esp32-original");
+
+        // Dispositivo forjado tenta resolver
+        shortTimeoutService.resolverAck("esp32-atacante", correlationId, CommandDeliveryStatus.DELIVERED);
+
+        // Deve expirar com TIMEOUT pois a resposta do atacante foi ignorada
+        CommandDeliveryStatus status = shortTimeoutService.aguardarAck(correlationId);
+        assertEquals(CommandDeliveryStatus.TIMEOUT, status);
+        assertEquals(0, shortTimeoutService.getPendingAcksCount());
+    }
 }

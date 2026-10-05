@@ -36,6 +36,10 @@ public class CommandAckService {
     private final ConcurrentHashMap<String, CompletableFuture<CommandDeliveryStatus>> pendingAcks =
             new ConcurrentHashMap<>();
 
+    // Chave: correlationId, Valor: externalId do dispositivo que deve responder
+    private final ConcurrentHashMap<String, String> ackDeviceBindings =
+            new ConcurrentHashMap<>();
+
     public CommandAckService() {
         this(DEFAULT_ACK_TIMEOUT_MS);
     }
@@ -46,15 +50,37 @@ public class CommandAckService {
     }
 
     /**
-     * Registra a espera por um ACK para um correlationId específico.
-     * Deve ser chamado ANTES de publicar o comando no MQTT.
+     * Registra preventivamente a espera de um ACK ANTES do comando ser publicado no MQTT.
+     * Elimina race condition caso o dispositivo responda de forma ultra-rápida.
+     *
+     * @param correlationId UUID único gerado pelo backend para este comando
+     * @param deviceExternalId identificador de hardware do ESP32 esperado
+     */
+    public void registrarEspera(String correlationId, String deviceExternalId) {
+        if (correlationId != null && !correlationId.isBlank()) {
+            pendingAcks.putIfAbsent(correlationId, new CompletableFuture<>());
+            if (deviceExternalId != null && !deviceExternalId.isBlank()) {
+                ackDeviceBindings.put(correlationId, deviceExternalId);
+            }
+        }
+    }
+
+    /**
+     * Sobrecarga de conveniência para registro sem vínculo estrito de dispositivo.
+     */
+    public void registrarEspera(String correlationId) {
+        registrarEspera(correlationId, null);
+    }
+
+    /**
+     * Aguarda pelo ACK de um correlationId previamente registrado (ou registra e aguarda).
      *
      * @param correlationId UUID único gerado pelo backend para este comando
      * @return O status final: DELIVERED, FAILED ou TIMEOUT
      */
     public CommandDeliveryStatus aguardarAck(String correlationId) {
-        CompletableFuture<CommandDeliveryStatus> future = new CompletableFuture<>();
-        pendingAcks.put(correlationId, future);
+        CompletableFuture<CommandDeliveryStatus> future = pendingAcks.computeIfAbsent(
+                correlationId, k -> new CompletableFuture<>());
         log.debug("[ACK] Aguardando confirmação para correlationId='{}' (timeout={}ms)",
                 correlationId, ackTimeoutMs);
 
@@ -72,9 +98,33 @@ public class CommandAckService {
                     correlationId, e.getMessage(), e);
             return CommandDeliveryStatus.FAILED;
         } finally {
-            // Sempre limpa o mapa, mesmo em caso de erro ou timeout
+            // Sempre limpa os mapas, mesmo em caso de erro ou timeout
             pendingAcks.remove(correlationId);
+            ackDeviceBindings.remove(correlationId);
         }
+    }
+
+    /**
+     * Resolve o Future de um correlationId validando se o dispositivo emissor confere com o esperado.
+     *
+     * @param deviceExternalId identificador do dispositivo que enviou a confirmação
+     * @param correlationId UUID ecoado pelo firmware na confirmação
+     * @param status DELIVERED (COMMAND_SUCCESS) ou FAILED (COMMAND_FAILED)
+     */
+    public void resolverAck(String deviceExternalId, String correlationId, CommandDeliveryStatus status) {
+        if (correlationId == null || correlationId.isBlank()) {
+            log.debug("[ACK] Confirmação recebida sem correlationId — ignorada (sem Future pendente).");
+            return;
+        }
+
+        String expectedDevice = ackDeviceBindings.get(correlationId);
+        if (expectedDevice != null && deviceExternalId != null && !expectedDevice.equalsIgnoreCase(deviceExternalId)) {
+            log.warn("[ACK] Dispositivo '{}' tentou responder pelo correlationId='{}' associado ao dispositivo '{}'!",
+                    deviceExternalId, correlationId, expectedDevice);
+            return;
+        }
+
+        resolverAck(correlationId, status);
     }
 
     /**
