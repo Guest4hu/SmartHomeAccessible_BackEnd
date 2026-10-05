@@ -105,11 +105,11 @@ public class AutomationConfigService {
 
         AutomationConfig savedConfig = automationConfigRepository.save(configToSave);
 
-        // Publica a nova configuração no tópico retained do firmware.
+        // Publica a nova configuração no tópico retained do firmware (QoS 1, Retained true).
         // O ESP32 recebe imediatamente se online; se offline, receberá na reconexão (retained).
         String configTopic = "devices/" + device.getExternalId() + "/config";
         String configPayload = automationConfigMapper.toMqttConfigPayload(savedConfig);
-        mqttGateway.sendToMqtt(configTopic, configPayload);
+        mqttGateway.sendToMqtt(configTopic, 1, true, configPayload);
         log.info("[Config] Configuracao publicada no topico MQTT {}: {}", configTopic, configPayload);
 
         return automationConfigMapper.toResponse(savedConfig);
