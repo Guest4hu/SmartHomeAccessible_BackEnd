@@ -141,4 +141,17 @@ class PushNotificationServiceTest {
 
         verifyNoInteractions(pushTokenRepository);
     }
+
+    @Test
+    @DisplayName("Deve despachar notificação de evento do sistema via sendEventNotification")
+    void sendEventNotification_DeveMontarPayloadEConsultarHome() {
+        Long homeId = 1L;
+        when(pushTokenRepository.findAllByHomeId(homeId)).thenReturn(List.of(token1));
+
+        pushNotificationService.sendEventNotification(homeId, "DOORBELL", "esp32-01", "Campainha", "Tocando");
+
+        verify(pushTokenRepository, times(1)).findAllByHomeId(homeId);
+        verify(pushTokenRepository, times(1)).saveAll(any());
+    }
 }
+

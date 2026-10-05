@@ -37,4 +37,25 @@ public interface PushNotificationService {
      * @return true se o modo Dry-Run estiver ativo ou se o Firebase não estiver configurado; false caso contrário.
      */
     boolean isDryRun();
+
+    /**
+     * Despacha uma notificação de evento especializada para os moradores da residência especificada.
+     *
+     * @param homeId identificador da residência
+     * @param eventType tipo de evento (ex: DOORBELL, CLIMATE_ANOMALY, DEVICE_OFFLINE)
+     * @param deviceId identificador do dispositivo de origem
+     * @param title título da notificação
+     * @param body mensagem detalhada do alerta ou evento
+     */
+    default void sendEventNotification(Long homeId, String eventType, String deviceId, String title, String body) {
+        java.util.Map<String, String> data = new java.util.HashMap<>();
+        if (eventType != null) {
+            data.put("eventType", eventType);
+        }
+        if (deviceId != null) {
+            data.put("deviceId", deviceId);
+        }
+        sendNotificationToHome(homeId, title, body, data);
+    }
 }
+
