@@ -2,6 +2,8 @@ package com.usjt.sistema_automatizado.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.usjt.sistema_automatizado.model.enums.SensoryChannel;
+import com.usjt.sistema_automatizado.model.enums.UrgencyLevel;
 import com.usjt.sistema_automatizado.repository.DeviceRepository;
 import com.usjt.sistema_automatizado.repository.HomeMemberRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -192,5 +194,109 @@ class NotificationServiceTest {
         assertEquals("esp32-04", payloadLegado.deviceId());
         assertEquals("ALERT", payloadLegado.event());
         assertNotNull(payloadLegado.timestamp());
+    }
+
+    @Test
+    void sendHeartbeat_DeveEnviarPingParaTodosEmissoresAtivos() throws Exception {
+        SseEmitter emitter1 = mock(SseEmitter.class);
+        SseEmitter emitter2 = mock(SseEmitter.class);
+
+        notificationService.addEmitter(1L, emitter1);
+        notificationService.addEmitter(2L, emitter2);
+        assertEquals(2, notificationService.getActiveEmittersCount());
+
+        notificationService.sendHeartbeat();
+
+        verify(emitter1, times(1)).send(any(SseEmitter.SseEventBuilder.class));
+        verify(emitter2, times(1)).send(any(SseEmitter.SseEventBuilder.class));
+        assertEquals(2, notificationService.getActiveEmittersCount());
+    }
+
+    @Test
+    void sendHeartbeat_DeveRemoverEmissoresComErro() throws Exception {
+        SseEmitter okEmitter = mock(SseEmitter.class);
+        SseEmitter failingEmitter = mock(SseEmitter.class);
+        doThrow(new IOException("Connection reset by peer")).when(failingEmitter).send(any(SseEmitter.SseEventBuilder.class));
+
+        notificationService.addEmitter(1L, okEmitter);
+        notificationService.addEmitter(2L, failingEmitter);
+        assertEquals(2, notificationService.getActiveEmittersCount());
+
+        notificationService.sendHeartbeat();
+
+        verify(okEmitter, times(1)).send(any(SseEmitter.SseEventBuilder.class));
+        verify(failingEmitter, times(1)).send(any(SseEmitter.SseEventBuilder.class));
+
+        // failingEmitter deve ter sido removido
+        assertEquals(1, notificationService.getActiveEmittersCount());
+        assertEquals(0, notificationService.getActiveEmittersCountForUser(2L));
+        assertEquals(1, notificationService.getActiveEmittersCountForUser(1L));
+    }
+
+    @Test
+    void notificationPayload_DeveInferirMetadadosAcessibilidadeCorretamente() {
+        // Campainha: MULTIMODAL, WARNING
+        NotificationService.NotificationPayload doorbell =
+                new NotificationService.NotificationPayload(1L, "esp32-01", "DOORBELL");
+        assertEquals(UrgencyLevel.WARNING, doorbell.urgency());
+        assertEquals(SensoryChannel.MULTIMODAL, doorbell.sensoryChannel());
+        assertTrue(doorbell.altText().contains("campainha"));
+        assertTrue(doorbell.ttsText().contains("tocando"));
+
+        // Presença: VISUAL, INFO
+        NotificationService.NotificationPayload presence =
+                new NotificationService.NotificationPayload(1L, "esp32-01", "PRESENCE_DETECTED");
+        assertEquals(UrgencyLevel.INFO, presence.urgency());
+        assertEquals(SensoryChannel.VISUAL, presence.sensoryChannel());
+        assertTrue(presence.altText().contains("Presença"));
+        assertTrue(presence.ttsText().contains("Presença"));
+
+        // Falha de comando: MULTIMODAL, WARNING
+        NotificationService.NotificationPayload cmdFail =
+                new NotificationService.NotificationPayload(1L, "esp32-01", "COMMAND_FAILED");
+        assertEquals(UrgencyLevel.WARNING, cmdFail.urgency());
+        assertEquals(SensoryChannel.MULTIMODAL, cmdFail.sensoryChannel());
+        assertTrue(cmdFail.altText().contains("Falha"));
+
+        // Emergência: CRITICAL
+        NotificationService.NotificationPayload emergency =
+                new NotificationService.NotificationPayload(1L, "esp32-01", "EMERGENCY");
+        assertEquals(UrgencyLevel.CRITICAL, emergency.urgency());
+    }
+
+    @Test
+    void dispatchEvent_DevePermitirCustomizacaoDeAcessibilidade() throws Exception {
+        Long homeId = 10L;
+        String deviceId = "esp32-custom";
+        Long memberUserId = 1L;
+
+        SseEmitter emitter = mock(SseEmitter.class);
+        notificationService.addEmitter(memberUserId, emitter);
+
+        when(deviceRepository.findHomeIdByExternalId(deviceId)).thenReturn(Optional.of(homeId));
+        when(homeMemberRepository.findUserIdsByHomeId(homeId)).thenReturn(List.of(memberUserId));
+        when(objectMapper.writeValueAsString(any(NotificationService.NotificationPayload.class)))
+                .thenReturn("{}");
+
+        notificationService.dispatchEvent(
+                "custom-alert",
+                deviceId,
+                "FIRE_ALARM",
+                UrgencyLevel.CRITICAL,
+                SensoryChannel.MULTIMODAL,
+                "Alarme de incêndio acionado!",
+                "Evacue o local imediatamente."
+        );
+
+        ArgumentCaptor<NotificationService.NotificationPayload> captor =
+                ArgumentCaptor.forClass(NotificationService.NotificationPayload.class);
+        verify(objectMapper).writeValueAsString(captor.capture());
+
+        NotificationService.NotificationPayload captured = captor.getValue();
+        assertEquals(UrgencyLevel.CRITICAL, captured.urgency());
+        assertEquals(SensoryChannel.MULTIMODAL, captured.sensoryChannel());
+        assertEquals("Alarme de incêndio acionado!", captured.altText());
+        assertEquals("Evacue o local imediatamente.", captured.ttsText());
+        verify(emitter).send(any(SseEmitter.SseEventBuilder.class));
     }
 }

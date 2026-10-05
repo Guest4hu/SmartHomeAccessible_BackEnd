@@ -3,10 +3,13 @@ package com.usjt.sistema_automatizado.service;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.usjt.sistema_automatizado.model.enums.SensoryChannel;
+import com.usjt.sistema_automatizado.model.enums.UrgencyLevel;
 import com.usjt.sistema_automatizado.repository.DeviceRepository;
 import com.usjt.sistema_automatizado.repository.HomeMemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -45,15 +48,72 @@ public class NotificationService {
             Long homeId,
             String deviceId,
             String event,
+            UrgencyLevel urgency,
+            SensoryChannel sensoryChannel,
+            String altText,
+            String ttsText,
             @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
             LocalDateTime timestamp
     ) {
+        public NotificationPayload(Long homeId, String deviceId, String event, LocalDateTime timestamp) {
+            this(
+                    homeId,
+                    deviceId,
+                    event,
+                    inferUrgency(event),
+                    inferSensoryChannel(event),
+                    inferAltText(deviceId, event),
+                    inferTtsText(event),
+                    timestamp != null ? timestamp : LocalDateTime.now(ZoneOffset.UTC)
+            );
+        }
+
         public NotificationPayload(Long homeId, String deviceId, String event) {
             this(homeId, deviceId, event, LocalDateTime.now(ZoneOffset.UTC));
         }
 
         public NotificationPayload(String deviceId, String event) {
             this(null, deviceId, event, LocalDateTime.now(ZoneOffset.UTC));
+        }
+
+        public static UrgencyLevel inferUrgency(String event) {
+            if (event == null) return UrgencyLevel.INFO;
+            return switch (event.toUpperCase()) {
+                case "DOORBELL", "COMMAND_FAILED", "FILE_ERROR", "CRITICAL_ALERT" -> UrgencyLevel.WARNING;
+                case "EMERGENCY", "GAS_LEAK", "FIRE" -> UrgencyLevel.CRITICAL;
+                default -> UrgencyLevel.INFO;
+            };
+        }
+
+        public static SensoryChannel inferSensoryChannel(String event) {
+            if (event == null) return SensoryChannel.VISUAL;
+            return switch (event.toUpperCase()) {
+                case "DOORBELL", "COMMAND_FAILED" -> SensoryChannel.MULTIMODAL;
+                default -> SensoryChannel.VISUAL;
+            };
+        }
+
+        public static String inferAltText(String deviceId, String event) {
+            String dev = (deviceId != null) ? deviceId : "dispositivo";
+            if (event == null) return "Notificação do " + dev;
+            return switch (event.toUpperCase()) {
+                case "DOORBELL" -> "A campainha foi acionada pelo dispositivo " + dev + ".";
+                case "PRESENCE_DETECTED" -> "Presença detectada no ambiente pelo dispositivo " + dev + ".";
+                case "COMMAND_SUCCESS" -> "Comando executado com sucesso no dispositivo " + dev + ".";
+                case "COMMAND_FAILED" -> "Falha na execução de comando no dispositivo " + dev + ".";
+                default -> "Evento " + event + " registrado no dispositivo " + dev + ".";
+            };
+        }
+
+        public static String inferTtsText(String event) {
+            if (event == null) return "Nova notificação.";
+            return switch (event.toUpperCase()) {
+                case "DOORBELL" -> "A campainha está tocando.";
+                case "PRESENCE_DETECTED" -> "Presença detectada.";
+                case "COMMAND_SUCCESS" -> "Comando concluído com sucesso.";
+                case "COMMAND_FAILED" -> "Atenção: falha ao executar comando.";
+                default -> "Novo evento recebido.";
+            };
         }
     }
 
@@ -157,6 +217,65 @@ public class NotificationService {
                 }
             }
         }
+    }
+
+    /**
+     * Dispara evento com metadados de acessibilidade explicitamente customizados.
+     *
+     * @param sseEventName nome do evento SSE
+     * @param deviceId identificador do dispositivo
+     * @param eventType tipo de evento
+     * @param urgency nível de urgência
+     * @param channel canal sensorial
+     * @param altText texto alternativo para leitores de tela
+     * @param ttsText texto para síntese de voz (TTS)
+     */
+    public void dispatchEvent(String sseEventName, String deviceId, String eventType,
+                              UrgencyLevel urgency, SensoryChannel channel,
+                              String altText, String ttsText) {
+        Optional<Long> homeIdOpt = deviceRepository.findHomeIdByExternalId(deviceId);
+        if (homeIdOpt.isEmpty()) {
+            log.warn("[Notification] Dispositivo {} não encontrado; notificação SSE ignorada.", deviceId);
+            return;
+        }
+
+        Long homeId = homeIdOpt.get();
+        NotificationPayload payload = new NotificationPayload(
+                homeId,
+                deviceId,
+                eventType,
+                urgency != null ? urgency : NotificationPayload.inferUrgency(eventType),
+                channel != null ? channel : NotificationPayload.inferSensoryChannel(eventType),
+                altText != null ? altText : NotificationPayload.inferAltText(deviceId, eventType),
+                ttsText != null ? ttsText : NotificationPayload.inferTtsText(eventType),
+                LocalDateTime.now(ZoneOffset.UTC)
+        );
+        dispatchToHome(homeId, sseEventName, payload);
+    }
+
+    /**
+     * Envia heartbeat periódico a cada 25 segundos para manter conexões SSE ativas
+     * contra encerramentos prematuros por proxies reversos e descartar conexões inativas.
+     */
+    @Scheduled(fixedRate = 25000)
+    public void sendHeartbeat() {
+        if (userEmitters.isEmpty()) {
+            return;
+        }
+        log.trace("[Notification] Enviando heartbeat SSE para emissores ativos.");
+        userEmitters.forEach((userId, emitters) -> {
+            for (SseEmitter emitter : emitters) {
+                try {
+                    emitter.send(SseEmitter.event()
+                            .name("heartbeat")
+                            .comment("keep-alive")
+                            .data("{\"status\":\"PING\"}"));
+                } catch (IOException | IllegalStateException e) {
+                    log.debug("[Notification] Conexão SSE inativa para userId={}, removendo...", userId);
+                    removeEmitter(userId, emitter);
+                }
+            }
+        });
     }
 
     // Acessores package-private para testes unitários
