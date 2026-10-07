@@ -1,0 +1,721 @@
+{
+  "info": {
+    "_postman_id": "7b89c314-8f12-4d2b-930e-d71e289bf456",
+    "name": "SmartHome IoT — Sequência de Demonstração (Portfólio)",
+    "description": "Coleção completa e documentada para gravação de vídeo demonstrativo do SmartHome IoT Backend integrado ao firmware ESP32 (Wokwi / Hardware Real).\n\nDemonstra:\n1. Autenticação Stateless (JWT)\n2. Gestão Residencial Multi-Tenant\n3. Streaming em Tempo Real (Server-Sent Events) para acessibilidade de deficientes auditivos\n4. Disparo e Confirmação de Alerta de Campainha (WCAG 2.3.1)\n5. Controle Bidirecional de Hardware com Correlation Pattern (CompletableFuture)\n6. Reconfiguração Dinâmica de Limiares e Cores via MQTT Retained\n7. Consulta de Telemetria e Séries Temporais Analíticas.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01. Autenticação & Setup",
+      "item": [
+        {
+          "name": "01.1 - Registrar Novo Usuário",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Gustavo Engenharia\",\n  \"email\": \"gustavo.dev@smarthome.io\",\n  \"password\": \"SenhaForte123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register"]
+            },
+            "description": "Cadastra um novo morador na plataforma. A senha é criptografada com BCryptPasswordEncoder no banco MySQL."
+          },
+          "response": []
+        },
+        {
+          "name": "01.2 - Login (Obter Token JWT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.token) {",
+                  "    pm.environment.set(\"token\", jsonData.token);",
+                  "    pm.collectionVariables.set(\"token\", jsonData.token);",
+                  "    console.log(\"Token JWT capturado com sucesso!\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"gustavo.dev@smarthome.io\",\n  \"password\": \"SenhaForte123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Autentica as credenciais do usuário e retorna o Bearer Token JWT assinado com HMAC-SHA256 (validade de 24 horas). O script de teste salva o token automaticamente na variável `{{token}}`."
+          },
+          "response": []
+        }
+      ],
+      "description": "Fluxos de cadastro e autenticação stateless."
+    },
+    {
+      "name": "02. Gestão Residencial & IoT",
+      "item": [
+        {
+          "name": "02.1 - Criar Residência",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.environment.set(\"homeId\", jsonData.id);",
+                  "    pm.collectionVariables.set(\"homeId\", jsonData.id);",
+                  "    console.log(\"Residência criada ID: \" + jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Apartamento Acessível 101\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/homes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "homes"]
+            },
+            "description": "Cria uma nova residência multi-tenant. O usuário que cria a residência é registrado automaticamente na mesma transação com papel ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "02.2 - Listar Minhas Residências",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.length > 0) {",
+                  "    pm.environment.set(\"homeId\", jsonData[0].id);",
+                  "    pm.collectionVariables.set(\"homeId\", jsonData[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/homes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "homes"]
+            },
+            "description": "Lista todas as casas às quais o usuário autenticado pertence."
+          },
+          "response": []
+        },
+        {
+          "name": "02.3 - Cadastrar Dispositivo ESP32 na Residência",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.environment.set(\"deviceId\", jsonData.id);",
+                  "    pm.collectionVariables.set(\"deviceId\", jsonData.id);",
+                  "    pm.environment.set(\"externalId\", jsonData.externalId);",
+                  "    pm.collectionVariables.set(\"externalId\", jsonData.externalId);",
+                  "    console.log(\"Dispositivo cadastrado ID: \" + jsonData.id + \" (externalId: \" + jsonData.externalId + \")\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalId\": \"{{externalId}}\",\n  \"name\": \"Módulo Sala e Campainha\",\n  \"room\": \"Sala de Estar\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/homes/{{homeId}}/devices",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "homes", "{{homeId}}", "devices"]
+            },
+            "description": "Vincula o identificador de hardware do ESP32 (`externalId` gerado do MAC efuse) à residência. Se estiver usando o ID da migration de seed, use `esp32-100100C40A24`; se estiver simulando no Wokwi, use o ID exibido no Serial Monitor."
+          },
+          "response": []
+        },
+        {
+          "name": "02.4 - Listar Dispositivos da Residência",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.length > 0) {",
+                  "    pm.environment.set(\"deviceId\", jsonData[0].id);",
+                  "    pm.collectionVariables.set(\"deviceId\", jsonData[0].id);",
+                  "    pm.environment.set(\"externalId\", jsonData[0].externalId);",
+                  "    pm.collectionVariables.set(\"externalId\", jsonData[0].externalId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/homes/{{homeId}}/devices",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "homes", "{{homeId}}", "devices"]
+            },
+            "description": "Lista os dispositivos da residência, exibindo status de conexão (`ONLINE`/`OFFLINE`) e data do último sinal recebido (`lastSeenAt`)."
+          },
+          "response": []
+        }
+      ],
+      "description": "Gestão de residências e dispositivos associados."
+    },
+    {
+      "name": "03. Tempo Real & Streaming Acessível (SSE)",
+      "item": [
+        {
+          "name": "03.1 - Conectar ao Stream de Eventos (SSE)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/stream?token={{token}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "stream"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "description": "Parâmetro de query aceito na rota SSE para viabilizar conexões EventSource nativas"
+                }
+              ]
+            },
+            "description": "Estabelece conexão HTTP persistente (Server-Sent Events) para entrega imediata de alertas multissensoriais (toque de campainha, detecção de presença, anomalias críticas).\n\n💡 **Dica de Vídeo:** Deixe esta requisição aberta ou execute em um terminal com:\n`curl -N \"http://localhost:8080/api/v1/notifications/stream?token={{token}}\"`\nQuando o botão da campainha for pressionado no Wokwi, a notificação chegará instantaneamente nesta conexão!"
+          },
+          "response": []
+        }
+      ],
+      "description": "Canal em tempo real Server-Sent Events (SSE) isolado por residência."
+    },
+    {
+      "name": "04. Alertas de Campainha & Confirmação (Acknowledge)",
+      "item": [
+        {
+          "name": "04.1 - Listar Alertas Pendentes da Casa",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.length > 0) {",
+                  "    pm.environment.set(\"eventId\", jsonData[0].id);",
+                  "    pm.collectionVariables.set(\"eventId\", jsonData[0].id);",
+                  "    console.log(\"Alerta pendente capturado ID: \" + jsonData[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/homes/{{homeId}}/events?pendingOnly=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "homes", "{{homeId}}", "events"],
+              "query": [
+                {
+                  "key": "pendingOnly",
+                  "value": "true",
+                  "description": "Filtra apenas eventos sem confirmação de atendimento"
+                }
+              ]
+            },
+            "description": "Retorna os alertas não atendidos da casa (onde `acknowledged_at IS NULL`). Capture o `id` do evento gerado pelo toque da campainha."
+          },
+          "response": []
+        },
+        {
+          "name": "04.2 - Confirmar Visualização do Alerta (Acknowledge)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Alerta marcado com sucesso\", function () {",
+                  "    pm.expect(jsonData.acknowledgedAt).to.not.be.null;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/{{eventId}}/acknowledge",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "events", "{{eventId}}", "acknowledge"]
+            },
+            "description": "Registra a confirmação de que o morador viu o alerta visual da campainha. Salva quem confirmou e o carimbo temporal UTC."
+          },
+          "response": []
+        }
+      ],
+      "description": "Fluxo acessível de confirmação e atendimento de alertas visuais."
+    },
+    {
+      "name": "05. Comandos de Hardware & Correlation Pattern",
+      "item": [
+        {
+          "name": "05.1 - Ligar Ventilador (TURN_ON)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Comando entregue e confirmado pelo firmware\", function () {",
+                  "    pm.expect(jsonData.status).to.eql(\"DELIVERED\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"TURN_ON\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/commands",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "commands"]
+            },
+            "description": "Envia comando para acionar o ventilador no ESP32.\n\n⚙️ **Mecânica Interna (Correlation Pattern):**\n1. O backend gera um UUID único (`correlationId`) e publica em `devices/{externalId}/cmd`.\n2. O backend bloqueia a thread HTTP aguardando a resposta no `CommandAckService` (sem abrir transação JPA para poupar conexões).\n3. O ESP32 comuta o relé para HIGH, acende o LED Azul e despacha a confirmação com o mesmo `correlationId` em `devices/{externalId}/event`.\n4. O backend recebe o ACK e responde HTTP 200 com status `DELIVERED`."
+          },
+          "response": []
+        },
+        {
+          "name": "05.2 - Desligar Ventilador (TURN_OFF)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Comando desligado confirmado\", function () {",
+                  "    pm.expect(jsonData.status).to.eql(\"DELIVERED\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"TURN_OFF\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/commands",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "commands"]
+            },
+            "description": "Desliga o ventilador com confirmação síncrona do relé pelo ESP32 via Correlation Pattern."
+          },
+          "response": []
+        },
+        {
+          "name": "05.3 - Teste de Alerta Visual (BLINK_LED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Comando BLINK_LED entregue com sucesso\", function () {",
+                  "    pm.expect(jsonData.status).to.eql(\"DELIVERED\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BLINK_LED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/commands",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "commands"]
+            },
+            "description": "Dispara o teste visual no LED RGB do ESP32.\n\n👁️ **Acessibilidade WCAG 2.3.1:**\nO firmware executa a FSM com 3 ciclos de 300ms ON / 300ms OFF (1.67 Hz), abaixo do limite fotossensível de 3 Hz."
+          },
+          "response": []
+        }
+      ],
+      "description": "Envio de comandos REST com confirmação de entrega via ACK MQTT."
+    },
+    {
+      "name": "06. Automação & Reconfiguração Remota (MQTT Retained)",
+      "item": [
+        {
+          "name": "06.1 - Consultar Parâmetros de Automação Atuais",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "config"]
+            },
+            "description": "Retorna os limiares de histerese (`fanOnAbove`, `fanOffBelow`) e os canais RGB da campainha (`bellR`, `bellG`, `bellB`)."
+          },
+          "response": []
+        },
+        {
+          "name": "06.2 - Alterar Histerese e Cor RGB da Campainha",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Configuração atualizada\", function () {",
+                  "    pm.expect(jsonData.bellB).to.eql(255);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fanOnAbove\": 29.0,\n  \"fanOffBelow\": 25.0,\n  \"darkBelow\": 350.0,\n  \"doorbellPattern\": \"TRIPLE_FLASH\",\n  \"bellR\": 0,\n  \"bellG\": 150,\n  \"bellB\": 255\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "config"]
+            },
+            "description": "Atualiza os limiares de histerese e altera dinamicamente a cor da campainha para Ciano/Azul (`bellR=0, bellG=150, bellB=255`).\n\n📡 **Propagação Automática via MQTT:**\nO backend salva no MySQL e publica no tópico `devices/{externalId}/config` com QoS 1 e **Retained=true**.\nO ESP32 atualiza os parâmetros na memória imediatamente via `processarConfig` sem reiniciar o microcontrolador!\nNa próxima vez que a campainha for acionada no Wokwi, o LED piscará em Ciano em vez de Vermelho!"
+          },
+          "response": []
+        }
+      ],
+      "description": "Gestão de limites de automação, histerese e customização de cores."
+    },
+    {
+      "name": "07. Telemetria Ambiental & Séries Temporais",
+      "item": [
+        {
+          "name": "07.1 - Listar Métricas Disponíveis",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "metrics"]
+            },
+            "description": "Retorna o catálogo de métricas lidas pelo dispositivo (`TEMPERATURE`, `HUMIDITY`, `LUMINOSITY`)."
+          },
+          "response": []
+        },
+        {
+          "name": "07.2 - Consultar Histórico de Temperatura (Série Temporal)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code é 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Série temporal possui dados\", function () {",
+                  "    pm.expect(jsonData.metric).to.eql(\"TEMPERATURE\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/{{deviceId}}/metrics/TEMPERATURE",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "{{deviceId}}", "metrics", "TEMPERATURE"]
+            },
+            "description": "Retorna a agregação temporal das temperaturas enviadas pelo sensor DHT22 do ESP32 a cada 5 segundos. O backend calcula automaticamente a resolução adequada (`RAW`, `HOUR` ou `DAY`)."
+          },
+          "response": []
+        }
+      ],
+      "description": "Consulta de telemetria em formato longo e séries temporais analíticas."
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "homeId",
+      "value": "1"
+    },
+    {
+      "key": "deviceId",
+      "value": "1"
+    },
+    {
+      "key": "externalId",
+      "value": "esp32-100100C40A24"
+    },
+    {
+      "key": "eventId",
+      "value": ""
+    }
+  ]
+}
